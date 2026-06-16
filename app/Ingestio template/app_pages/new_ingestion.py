@@ -1,3 +1,5 @@
+from datetime import date
+
 import streamlit as st
 
 from app_config import (
@@ -23,15 +25,44 @@ def render_new_ingestion_page() -> None:
         "Provide the details needed to register and onboard a new data source into EDH.",
     )
 
-    render_form_heading("New Source Details", 16)
+    render_form_heading("New Source Details", 20)
 
     with st.form("new_ingestion_request"):
 
+        # ── Section 0: Request metadata ───────────────────────────────────────
+        col_meta_a, col_meta_b = st.columns(2, gap="large")
+        with col_meta_a:
+            render_field_intro(1, "Business unit", "Which department is making this request?")
+            business_unit = st.text_input(
+                "Business unit", placeholder="e.g. Finance", label_visibility="collapsed"
+            )
+        with col_meta_b:
+            render_field_intro(2, "Requestor", "Who is submitting this request?")
+            requestor = st.text_input(
+                "Requestor", placeholder="e.g. John Smith", label_visibility="collapsed"
+            )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        col_meta_c, col_meta_d = st.columns(2, gap="large")
+        with col_meta_c:
+            render_field_intro(3, "Request date", "Date of this request.")
+            request_date = st.date_input(
+                "Request date", value=date.today(), label_visibility="collapsed"
+            )
+        with col_meta_d:
+            render_field_intro(4, "Business justification", "Why is this data needed?")
+            business_justification = st.text_input(
+                "Business justification",
+                placeholder="e.g. Required for monthly reporting",
+                label_visibility="collapsed",
+            )
+
         # ── Section 1: Source details ────────────────────────────────────────
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_a, col_b = st.columns(2, gap="large")
 
         with col_a:
-            render_field_intro(1, "Source name", "What is the name of this data source?")
+            render_field_intro(5, "Source name", "What is the name of this data source?")
             source_name = st.text_input(
                 "Source name",
                 placeholder="e.g. Claims Feed — Vendor ABC",
@@ -39,7 +70,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_b:
-            render_field_intro(2, "Data volume", "How much data is expected per load (GB)?")
+            render_field_intro(6, "Data volume", "How much data is expected per load (GB)?")
             data_volume_gb = st.number_input(
                 "Data volume (GB)",
                 min_value=0.01,
@@ -53,7 +84,7 @@ def render_new_ingestion_page() -> None:
         col_c, col_d = st.columns(2, gap="large")
 
         with col_c:
-            render_field_intro(3, "SLA time", "Required delivery time from source arrival (hours).")
+            render_field_intro(7, "SLA time", "Required delivery time from source arrival (hours).")
             sla_hours = st.number_input(
                 "SLA time (hours)",
                 min_value=1,
@@ -63,7 +94,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_d:
-            render_field_intro(4, "File format", "What format will the source files arrive in?")
+            render_field_intro(8, "File format", "What format will the source files arrive in?")
             file_format = st.selectbox(
                 "File format",
                 options=FILE_FORMATS,
@@ -77,7 +108,7 @@ def render_new_ingestion_page() -> None:
         col_e, col_f, col_g = st.columns(3, gap="large")
 
         with col_e:
-            render_field_intro(5, "Partitioning", "Is the source data partitioned?")
+            render_field_intro(9, "Partitioning", "Is the source data partitioned?")
             partitioning = st.selectbox(
                 "Partitioning",
                 options=YES_NO,
@@ -87,7 +118,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_f:
-            render_field_intro(6, "Data skew", "Does the data have significant skew?")
+            render_field_intro(10, "Data skew", "Does the data have significant skew?")
             data_skew = st.selectbox(
                 "Data skew",
                 options=YES_NO,
@@ -97,7 +128,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_g:
-            render_field_intro(7, "Small files problem", "Will this source produce many small files?")
+            render_field_intro(11, "Small files problem", "Will this source produce many small files?")
             small_files = st.selectbox(
                 "Small files problem",
                 options=YES_NO,
@@ -107,7 +138,7 @@ def render_new_ingestion_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(8, "Frequency", "How often will data be loaded?")
+        render_field_intro(12, "Frequency", "How often will data be loaded?")
         frequency = st.selectbox(
             "Frequency",
             options=FREQUENCIES,
@@ -121,7 +152,7 @@ def render_new_ingestion_page() -> None:
         col_h, col_i = st.columns(2, gap="large")
 
         with col_h:
-            render_field_intro(9, "Egress", "Will data cross network boundaries (egress charges apply)?")
+            render_field_intro(13, "Egress", "Will data cross network boundaries (egress charges apply)?")
             egress = st.selectbox(
                 "Egress",
                 options=YES_NO,
@@ -131,7 +162,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_i:
-            render_field_intro(10, "Network connection", "How is the source system connected?")
+            render_field_intro(14, "Network connection", "How is the source system connected?")
             network_connection = st.selectbox(
                 "Network connection",
                 options=NETWORK_CONNECTIONS,
@@ -142,7 +173,7 @@ def render_new_ingestion_page() -> None:
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         render_field_intro(
-            11,
+            15,
             "Transformation complexity",
             "How complex are the transformations required for this source?",
         )
@@ -158,7 +189,7 @@ def render_new_ingestion_page() -> None:
         col_j, col_k = st.columns(2, gap="large")
 
         with col_j:
-            render_field_intro(12, "Region", "Which cloud region will this source be ingested in?")
+            render_field_intro(16, "Region", "Which cloud region will this source be ingested in?")
             region = st.selectbox(
                 "Region",
                 options=REGIONS,
@@ -168,7 +199,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_k:
-            render_field_intro(13, "Cluster type", "What type of Databricks cluster will be used?")
+            render_field_intro(17, "Cluster type", "What type of Databricks cluster will be used?")
             cluster_type = st.selectbox(
                 "Cluster type",
                 options=CLUSTER_TYPES,
@@ -181,7 +212,7 @@ def render_new_ingestion_page() -> None:
         col_l, col_m, col_n = st.columns(3, gap="large")
 
         with col_l:
-            render_field_intro(14, "VM type", "What VM category will the cluster use?")
+            render_field_intro(18, "VM type", "What VM category will the cluster use?")
             vm_type = st.selectbox(
                 "VM type",
                 options=VM_TYPES,
@@ -191,7 +222,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_m:
-            render_field_intro(15, "Nodes", "How many worker nodes will the cluster have?")
+            render_field_intro(19, "Nodes", "How many worker nodes will the cluster have?")
             nodes = st.number_input(
                 "Nodes",
                 min_value=1,
@@ -201,7 +232,7 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_n:
-            render_field_intro(16, "Runtime", "Expected job runtime in hours.")
+            render_field_intro(20, "Runtime", "Expected job runtime in hours.")
             runtime_hours = st.number_input(
                 "Runtime (hours)",
                 min_value=1,
