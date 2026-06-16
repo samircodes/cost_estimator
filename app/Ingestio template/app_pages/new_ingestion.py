@@ -6,7 +6,6 @@ from app_config import (
     FREQUENCIES,
     NETWORK_CONNECTIONS,
     REGIONS,
-    RUNTIMES,
     TRANSFORMATION_COMPLEXITIES,
     VM_TYPES,
 )
@@ -79,37 +78,41 @@ def render_new_ingestion_page() -> None:
 
         with col_e:
             render_field_intro(5, "Partitioning", "Is the source data partitioned?")
-            partitioning = st.radio(
+            partitioning = st.selectbox(
                 "Partitioning",
                 options=YES_NO,
-                horizontal=True,
+                index=None,
+                placeholder="Select",
                 label_visibility="collapsed",
             )
 
         with col_f:
             render_field_intro(6, "Data skew", "Does the data have significant skew?")
-            data_skew = st.radio(
+            data_skew = st.selectbox(
                 "Data skew",
                 options=YES_NO,
-                horizontal=True,
+                index=None,
+                placeholder="Select",
                 label_visibility="collapsed",
             )
 
         with col_g:
             render_field_intro(7, "Small files problem", "Will this source produce many small files?")
-            small_files = st.radio(
+            small_files = st.selectbox(
                 "Small files problem",
                 options=YES_NO,
-                horizontal=True,
+                index=None,
+                placeholder="Select",
                 label_visibility="collapsed",
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         render_field_intro(8, "Frequency", "How often will data be loaded?")
-        frequency = st.radio(
+        frequency = st.selectbox(
             "Frequency",
             options=FREQUENCIES,
-            horizontal=True,
+            index=None,
+            placeholder="Select a frequency",
             label_visibility="collapsed",
         )
 
@@ -119,10 +122,11 @@ def render_new_ingestion_page() -> None:
 
         with col_h:
             render_field_intro(9, "Egress", "Will data cross network boundaries (egress charges apply)?")
-            egress = st.radio(
+            egress = st.selectbox(
                 "Egress",
                 options=YES_NO,
-                horizontal=True,
+                index=None,
+                placeholder="Select",
                 label_visibility="collapsed",
             )
 
@@ -197,12 +201,12 @@ def render_new_ingestion_page() -> None:
             )
 
         with col_n:
-            render_field_intro(16, "Runtime", "Which Databricks Runtime version will be used?")
-            runtime = st.selectbox(
-                "Runtime",
-                options=RUNTIMES,
-                index=None,
-                placeholder="Select runtime",
+            render_field_intro(16, "Runtime", "Expected job runtime in hours.")
+            runtime_hours = st.number_input(
+                "Runtime (hours)",
+                min_value=1,
+                value=1,
+                step=1,
                 label_visibility="collapsed",
             )
 

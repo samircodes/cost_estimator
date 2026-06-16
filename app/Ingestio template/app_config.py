@@ -25,7 +25,18 @@ INGESTION_MODES = ("CDC", "Bulk")
 
 FILE_FORMATS = ("CSV", "JSON", "Parquet", "Delta", "Avro", "ORC", "XML")
 
-FREQUENCIES = ("Real-time", "Hourly", "Daily", "Weekly", "Monthly", "On-demand")
+FREQUENCIES = (
+    "Every Hour",
+    "Every 2 Hours",
+    "Every 3 Hours",
+    "Every 4 Hours",
+    "Every 6 Hours",
+    "Every 8 Hours",
+    "Every 12 Hours",
+    "Daily",
+    "Weekly",
+    "Monthly",
+)
 
 TRANSFORMATION_COMPLEXITIES = ("Low", "Medium", "High")
 
@@ -40,7 +51,7 @@ REGIONS = (
     "ap-northeast-1",
 )
 
-CLUSTER_TYPES = ("Standard", "High Concurrency", "Single Node", "Serverless")
+CLUSTER_TYPES = ("Job Cluster", "All Purpose", "Serverless")
 
 VM_TYPES = (
     "General Purpose",
@@ -50,13 +61,6 @@ VM_TYPES = (
 )
 
 NETWORK_CONNECTIONS = ("VPN", "Direct Connect", "Private Link", "Public Internet")
-
-RUNTIMES = (
-    "15.4 LTS (Spark 3.5)",
-    "14.3 LTS (Spark 3.5)",
-    "13.3 LTS (Spark 3.4)",
-    "12.2 LTS (Spark 3.3)",
-)
 
 
 @dataclass(frozen=True)
