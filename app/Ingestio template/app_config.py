@@ -23,6 +23,41 @@ SOURCE_TYPES = (
 
 INGESTION_MODES = ("CDC", "Bulk")
 
+FILE_FORMATS = ("CSV", "JSON", "Parquet", "Delta", "Avro", "ORC", "XML")
+
+FREQUENCIES = ("Real-time", "Hourly", "Daily", "Weekly", "Monthly", "On-demand")
+
+TRANSFORMATION_COMPLEXITIES = ("Low", "Medium", "High")
+
+REGIONS = (
+    "us-east-1",
+    "us-east-2",
+    "us-west-1",
+    "us-west-2",
+    "eu-west-1",
+    "eu-central-1",
+    "ap-southeast-1",
+    "ap-northeast-1",
+)
+
+CLUSTER_TYPES = ("Standard", "High Concurrency", "Single Node", "Serverless")
+
+VM_TYPES = (
+    "General Purpose",
+    "Memory Optimized",
+    "Compute Optimized",
+    "Storage Optimized",
+)
+
+NETWORK_CONNECTIONS = ("VPN", "Direct Connect", "Private Link", "Public Internet")
+
+RUNTIMES = (
+    "15.4 LTS (Spark 3.5)",
+    "14.3 LTS (Spark 3.5)",
+    "13.3 LTS (Spark 3.4)",
+    "12.2 LTS (Spark 3.3)",
+)
+
 
 @dataclass(frozen=True)
 class RequestType:
