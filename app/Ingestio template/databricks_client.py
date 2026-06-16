@@ -17,15 +17,15 @@ def trigger_cost_estimate_job(
     request_id: str,
     data_volume_gb: float,
     source_type: str,
-    ingestion_mode: str,
+    load_type: str,
 ) -> int:
     run = _client().jobs.run_now(
         job_id=COST_ESTIMATOR_JOB_ID,
         job_parameters={
-            "request_id": request_id,
-            "data_volume_gb": str(data_volume_gb),
-            "source_type": source_type,
-            "ingestion_mode": ingestion_mode,
+            "request_id":    request_id,
+            "source_type":   source_type,
+            "additional_gb": str(data_volume_gb),
+            "load_type":     load_type,
         },
     )
     return run.run_id
@@ -52,17 +52,32 @@ def wait_for_run(run_id: int, timeout_seconds: int = 300) -> tuple[bool, str]:
 
 COLS = [
     "request_id",
-    "data_volume_gb",
+    "estimation_timestamp",
     "source_type",
-    "ingestion_mode",
-    "estimated_cost_usd",
-    "estimated_duration_days",
-    "submitted_at",
+    "additional_gb",
+    "load_type",
+    "layers",
+    "compute_cost",
+    "compute_low",
+    "compute_high",
+    "storage_cost",
+    "storage_low",
+    "storage_high",
+    "networking_cost",
+    "networking_low",
+    "networking_high",
+    "total_monthly_cost",
+    "total_low",
+    "total_high",
+    "total_annual_cost",
+    "annual_low",
+    "annual_high",
 ]
+
+_SELECT = ", ".join(COLS)
 
 
 def _run_query(client: WorkspaceClient, statement: str) -> list[list]:
-    """Execute a SQL statement and return rows, or empty list on failure."""
     response = client.statement_execution.execute_statement(
         warehouse_id=_get_warehouse_id(client),
         statement=statement,
@@ -79,7 +94,8 @@ def fetch_cost_estimate(request_id: str) -> dict[str, Any] | None:
     client = _client()
     rows = _run_query(
         client,
-        f"SELECT * FROM {COST_ESTIMATES_TABLE} WHERE request_id = '{request_id}' LIMIT 1",
+        f"SELECT {_SELECT} FROM {COST_ESTIMATES_TABLE} "
+        f"WHERE request_id = '{request_id}' LIMIT 1",
     )
     return dict(zip(COLS, rows[0])) if rows else None
 
@@ -88,7 +104,8 @@ def fetch_all_estimates() -> list[dict[str, Any]]:
     client = _client()
     rows = _run_query(
         client,
-        f"SELECT * FROM {COST_ESTIMATES_TABLE} ORDER BY submitted_at DESC",
+        f"SELECT {_SELECT} FROM {COST_ESTIMATES_TABLE} "
+        f"ORDER BY estimation_timestamp DESC",
     )
     return [dict(zip(COLS, row)) for row in rows]
 

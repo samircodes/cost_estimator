@@ -26,28 +26,66 @@ def render_request_history_page() -> None:
         )
         return
 
-    total_cost = sum(r["estimated_cost_usd"] for r in rows)
-    col_count, col_total = st.columns(2)
-    col_count.metric("Total Requests", len(rows))
-    col_total.metric("Total Estimated Cost", f"${total_cost:,.2f}")
+    # Summary metrics
+    total_monthly = sum(float(r["total_monthly_cost"] or 0) for r in rows)
+    total_annual  = sum(float(r["total_annual_cost"]  or 0) for r in rows)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Requests",        len(rows))
+    c2.metric("Total Monthly (est.)",  f"${total_monthly:,.2f}")
+    c3.metric("Total Annual (est.)",   f"${total_annual:,.2f}")
 
     st.markdown("---")
 
     for row in rows:
-        with st.container():
-            left, right = st.columns([3, 1])
-            with left:
-                st.markdown(
-                    f"**{row['source_type']}** — "
-                    f"{row['data_volume_gb']:,.2f} GB — "
-                    f"{row['ingestion_mode']} ingestion"
-                )
-                st.caption(f"Request ID: {row['request_id']}  |  Submitted: {row['submitted_at']}")
-            with right:
+        with st.expander(
+            f"**{row['source_type']}** — {row['additional_gb']} GB — "
+            f"{row['load_type']} — ${float(row['total_monthly_cost'] or 0):,.2f}/mo",
+            expanded=False,
+        ):
+            st.caption(
+                f"Request ID: {row['request_id']}  |  "
+                f"Submitted: {row['estimation_timestamp']}  |  "
+                f"Layers: {row['layers']}"
+            )
+
+            st.markdown("##### Cost Breakdown")
+            col_compute, col_storage, col_network = st.columns(3)
+
+            with col_compute:
                 st.metric(
-                    "Cost",
-                    f"${row['estimated_cost_usd']:,.2f}",
-                    delta=f"{row['estimated_duration_days']}d",
-                    delta_color="off",
+                    "Compute",
+                    f"${float(row['compute_cost'] or 0):,.4f}",
+                    help=f"Range: ${row['compute_low']} – ${row['compute_high']}",
                 )
-            st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+                st.caption(f"Range: ${row['compute_low']} – ${row['compute_high']}")
+
+            with col_storage:
+                st.metric(
+                    "Storage",
+                    f"${float(row['storage_cost'] or 0):,.4f}",
+                    help=f"Range: ${row['storage_low']} – ${row['storage_high']}",
+                )
+                st.caption(f"Range: ${row['storage_low']} – ${row['storage_high']}")
+
+            with col_network:
+                st.metric(
+                    "Networking",
+                    f"${float(row['networking_cost'] or 0):,.4f}",
+                    help=f"Range: ${row['networking_low']} – ${row['networking_high']}",
+                )
+                st.caption(f"Range: ${row['networking_low']} – ${row['networking_high']}")
+
+            st.markdown("##### Total")
+            col_monthly, col_annual = st.columns(2)
+            with col_monthly:
+                st.metric(
+                    "Monthly Estimate",
+                    f"${float(row['total_monthly_cost'] or 0):,.2f}",
+                )
+                st.caption(f"Range: ${row['total_low']} – ${row['total_high']}")
+            with col_annual:
+                st.metric(
+                    "Annual Estimate",
+                    f"${float(row['total_annual_cost'] or 0):,.2f}",
+                )
+                st.caption(f"Range: ${row['annual_low']} – ${row['annual_high']}")

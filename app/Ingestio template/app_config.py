@@ -11,7 +11,7 @@ APP_TITLE = "Ryan | Ingestion Requests"
 
 # Populate COST_ESTIMATOR_JOB_ID after running: databricks bundle deploy
 COST_ESTIMATOR_JOB_ID: int = int(os.environ.get("COST_ESTIMATOR_JOB_ID", "571312722093562"))
-COST_ESTIMATES_TABLE = os.environ.get("COST_ESTIMATES_TABLE", "workspace.default.cost_estimates")
+COST_ESTIMATES_TABLE = os.environ.get("COST_ESTIMATES_TABLE", "workspace.default.edh_cost_estimations")
 
 SOURCE_TYPES = (
     "Amazon S3",
@@ -20,6 +20,15 @@ SOURCE_TYPES = (
     "SQL (SQL Server)",
     "Sybase",
 )
+
+# Maps the UI display names to the names expected by the cost estimator notebook
+SOURCE_TYPE_MAP = {
+    "Amazon S3":      "S3",
+    "SFTP":           "SFTP",
+    "SQL (Postgres)": "Postgres",
+    "SQL (SQL Server)": "SQL Server",
+    "Sybase":         "Sybase",
+}
 
 INGESTION_MODES = ("CDC", "Bulk")
 

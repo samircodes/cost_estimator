@@ -2,7 +2,7 @@ import uuid
 
 import streamlit as st
 
-from app_config import INGESTION_MODES, SOURCE_TYPES
+from app_config import INGESTION_MODES, SOURCE_TYPE_MAP, SOURCE_TYPES
 from databricks_client import trigger_cost_estimate_job
 from ui import render_back_button, render_field_intro
 
@@ -82,8 +82,8 @@ def render_existing_source_page() -> None:
             trigger_cost_estimate_job(
                 request_id=request_id,
                 data_volume_gb=data_volume_gb,
-                source_type=source_type,
-                ingestion_mode=ingestion_mode,
+                source_type=SOURCE_TYPE_MAP[source_type],
+                load_type=ingestion_mode,
             )
         except Exception as exc:
             st.error(f"Failed to submit request: {exc}")
