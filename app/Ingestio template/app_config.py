@@ -10,7 +10,7 @@ REQUEST_HISTORY_PAGE = "request_history"
 APP_TITLE = "Ryan | Ingestion Requests"
 
 # Populate COST_ESTIMATOR_JOB_ID after running: databricks bundle deploy
-COST_ESTIMATOR_JOB_ID: int = int(os.environ.get("COST_ESTIMATOR_JOB_ID", "982445370652477"))
+COST_ESTIMATOR_JOB_ID: int = int(os.environ.get("COST_ESTIMATOR_JOB_ID", "571312722093562"))
 COST_ESTIMATES_TABLE = os.environ.get("COST_ESTIMATES_TABLE", "workspace.default.cost_estimates")
 
 SOURCE_TYPES = (
