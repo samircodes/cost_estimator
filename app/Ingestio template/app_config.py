@@ -32,7 +32,7 @@ SOURCE_TYPE_MAP = {
 
 INGESTION_MODES = ("Bulk", "CDC")
 
-DATA_FORMATS = ("CSV", "Parquet", "JDBC Tabular", "XLS", "XLSB", "JSON", "Avro", "ORC", "Other")
+DATA_FORMATS = ("JDBC Tabular", "CSV", "XLS", "XLSB", "Parquet")
 
 PRIMARY_KEY_OPTIONS      = ("Yes", "No")
 DELETE_HANDLING_OPTIONS  = ("Hard", "Soft", "Ignore")
