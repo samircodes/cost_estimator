@@ -30,7 +30,22 @@ SOURCE_TYPE_MAP = {
     "Sybase":         "Sybase",
 }
 
-INGESTION_MODES = ("CDC", "Bulk")
+INGESTION_MODES = ("Bulk", "CDC")
+
+# Valid data formats per source — matches notebook VALID_FORMATS_BY_SOURCE
+DATA_FORMAT_BY_SOURCE = {
+    "Amazon S3":        ("Parquet",),
+    "SFTP":             ("CSV", "XLS", "XLSB"),
+    "SQL (Postgres)":   ("JDBC Tabular",),
+    "SQL (SQL Server)": ("JDBC Tabular",),
+    "Sybase":           ("JDBC Tabular",),
+}
+
+PRIMARY_KEY_OPTIONS      = ("Yes", "No")
+DELETE_HANDLING_OPTIONS  = ("Hard", "Soft", "Ignore")
+SCHEMA_STABILITY_OPTIONS = ("Stable", "Occasionally Changes", "Highly Dynamic")
+CDC_METHOD_OPTIONS       = ("Not Applicable", "Timestamp", "Log Based")
+INGESTION_FREQUENCIES    = ("Daily", "Weekly", "Monthly")
 
 FILE_FORMATS = ("CSV", "JSON", "Parquet", "Delta", "Avro", "ORC", "XML")
 

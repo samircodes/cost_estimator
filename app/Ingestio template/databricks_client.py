@@ -15,17 +15,38 @@ def _client() -> WorkspaceClient:
 
 def trigger_cost_estimate_job(
     request_id: str,
-    data_volume_gb: float,
+    business_unit: str,
+    request_date: str,
+    requestor: str,
+    business_justification: str,
+    primary_key_available: str,
+    delete_handling: str,
+    schema_stability: str,
+    cdc_method: str,
     source_type: str,
+    data_format: str,
+    additional_gb: float,
     load_type: str,
+    ingestion_frequency: str,
 ) -> int:
     run = _client().jobs.run_now(
         job_id=COST_ESTIMATOR_JOB_ID,
         job_parameters={
-            "request_id":    request_id,
-            "source_type":   source_type,
-            "additional_gb": str(data_volume_gb),
-            "load_type":     load_type,
+            "request_id":             request_id,
+            "business_unit":          business_unit,
+            "request_date":           request_date,
+            "requestor":              requestor,
+            "business_justification": business_justification,
+            "primary_key_available":  primary_key_available,
+            "delete_handling":        delete_handling,
+            "schema_stability":       schema_stability,
+            "cdc_method":             cdc_method,
+            "source_type":            source_type,
+            "data_format":            data_format,
+            "additional_gb":          str(additional_gb),
+            "load_type":              load_type,
+            "ingestion_frequency":    ingestion_frequency,
+            "save_results":           "true",
         },
     )
     return run.run_id
@@ -53,10 +74,23 @@ def wait_for_run(run_id: int, timeout_seconds: int = 300) -> tuple[bool, str]:
 COLS = [
     "request_id",
     "estimation_timestamp",
+    # Metadata
+    "business_unit",
+    "request_date",
+    "requestor",
+    "business_justification",
+    "primary_key_available",
+    "delete_handling",
+    "schema_stability",
+    "cdc_method",
+    # Calculation inputs
     "source_type",
+    "data_format",
     "additional_gb",
     "load_type",
+    "ingestion_frequency",
     "layers",
+    # Cost totals
     "compute_cost",
     "compute_low",
     "compute_high",
