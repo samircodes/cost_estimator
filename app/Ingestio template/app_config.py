@@ -32,14 +32,7 @@ SOURCE_TYPE_MAP = {
 
 INGESTION_MODES = ("Bulk", "CDC")
 
-# Valid data formats per source — matches notebook VALID_FORMATS_BY_SOURCE
-DATA_FORMAT_BY_SOURCE = {
-    "Amazon S3":        ("Parquet",),
-    "SFTP":             ("CSV", "XLS", "XLSB"),
-    "SQL (Postgres)":   ("JDBC Tabular",),
-    "SQL (SQL Server)": ("JDBC Tabular",),
-    "Sybase":           ("JDBC Tabular",),
-}
+DATA_FORMATS = ("CSV", "Parquet", "JDBC Tabular", "XLS", "XLSB", "JSON", "Avro", "ORC", "Other")
 
 PRIMARY_KEY_OPTIONS      = ("Yes", "No")
 DELETE_HANDLING_OPTIONS  = ("Hard", "Soft", "Ignore")

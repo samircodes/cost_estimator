@@ -5,7 +5,7 @@ import streamlit as st
 
 from app_config import (
     CDC_METHOD_OPTIONS,
-    DATA_FORMAT_BY_SOURCE,
+    DATA_FORMATS,
     DELETE_HANDLING_OPTIONS,
     INGESTION_FREQUENCIES,
     INGESTION_MODES,
@@ -73,14 +73,12 @@ def render_existing_source_page() -> None:
             )
         with col_f:
             render_field_intro(6, "Data format", "Format of the source data.")
-            format_options = DATA_FORMAT_BY_SOURCE.get(source_type, ()) if source_type else ()
             data_format = st.selectbox(
                 "Data format",
-                options=format_options,
+                options=DATA_FORMATS,
                 index=None,
-                placeholder="Select source type first" if not source_type else "Select a format",
+                placeholder="Select a format",
                 label_visibility="collapsed",
-                disabled=not source_type,
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
