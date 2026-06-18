@@ -27,7 +27,7 @@ def render_existing_source_page() -> None:
         "Extend an established source with new files, tables, fields, or delivery requirements.",
     )
 
-    render_form_heading("Request Details", 13)
+    render_form_heading("Request Details", 14)
 
     with st.form("existing_source_request"):
 
@@ -156,6 +156,15 @@ def render_existing_source_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        render_field_intro(14, "Contains PHI", "Does this data source contain Protected Health Information?")
+        contains_phi = st.radio(
+            "Contains PHI",
+            options=PRIMARY_KEY_OPTIONS,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         submitted = st.form_submit_button(
             "Submit request", type="primary", use_container_width=False
         )
@@ -173,6 +182,7 @@ def render_existing_source_page() -> None:
                 ("CDC method", cdc_method),
                 ("Business unit", business_unit),
                 ("Requestor", requestor),
+                ("Contains PHI", contains_phi),
             ] if not val
         ]
         if missing:
@@ -197,6 +207,7 @@ def render_existing_source_page() -> None:
                 additional_gb=additional_gb,
                 load_type=load_type,
                 ingestion_frequency=ingestion_frequency,
+                contains_phi=contains_phi,
             )
         except Exception as exc:
             st.error(f"Failed to submit request: {exc}")

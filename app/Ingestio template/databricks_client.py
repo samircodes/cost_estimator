@@ -28,6 +28,7 @@ def trigger_cost_estimate_job(
     additional_gb: float,
     load_type: str,
     ingestion_frequency: str,
+    contains_phi: str,
 ) -> int:
     run = _client().jobs.run_now(
         job_id=COST_ESTIMATOR_JOB_ID,
@@ -46,6 +47,7 @@ def trigger_cost_estimate_job(
             "additional_gb":          str(additional_gb),
             "load_type":              load_type,
             "ingestion_frequency":    ingestion_frequency,
+            "contains_phi":           contains_phi,
             "save_results":           "true",
         },
     )

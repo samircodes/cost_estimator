@@ -71,10 +71,8 @@ REGIONS = (
 CLUSTER_TYPES = ("Job Cluster", "All Purpose", "Serverless")
 
 VM_TYPES = (
-    "General Purpose",
-    "Memory Optimized",
-    "Compute Optimized",
-    "Storage Optimized",
+    "Standard_DS3_v2",
+    "Standard_DS5_v2",
 )
 
 NETWORK_CONNECTIONS = ("VPN", "Direct Connect", "Private Link", "Public Internet")

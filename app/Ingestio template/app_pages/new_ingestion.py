@@ -25,7 +25,7 @@ def render_new_ingestion_page() -> None:
         "Provide the details needed to register and onboard a new data source into EDH.",
     )
 
-    render_form_heading("New Source Details", 20)
+    render_form_heading("New Source Details", 21)
 
     with st.form("new_ingestion_request"):
 
@@ -240,6 +240,15 @@ def render_new_ingestion_page() -> None:
                 step=1,
                 label_visibility="collapsed",
             )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        render_field_intro(21, "Contains PHI", "Does this data source contain Protected Health Information?")
+        contains_phi = st.radio(
+            "Contains PHI",
+            options=YES_NO,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         st.form_submit_button(
