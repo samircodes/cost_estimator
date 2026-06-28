@@ -11,7 +11,7 @@ APP_TITLE = "Ryan | Ingestion Requests"
 
 # ── Dispatcher job (handles both existing-source and new-source requests) ─────
 # Populate after running: databricks bundle deploy
-ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "0"))
+ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "843013258339321"))
 
 # ── Delta tables ──────────────────────────────────────────────────────────────
 COST_ESTIMATES_TABLE      = os.environ.get("COST_ESTIMATES_TABLE",      "edh.ingestion.edh_cost_estimations")
