@@ -5,7 +5,9 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
 from databricks.sdk.service.sql import StatementState
 
-from app_config import COST_ESTIMATOR_JOB_ID, COST_ESTIMATES_TABLE
+import json
+
+from app_config import COST_ESTIMATES_TABLE, ESTIMATOR_JOB_ID
 
 
 def _client() -> WorkspaceClient:
@@ -13,42 +15,17 @@ def _client() -> WorkspaceClient:
     return WorkspaceClient()
 
 
-def trigger_cost_estimate_job(
-    request_id: str,
-    business_unit: str,
-    request_date: str,
-    requestor: str,
-    business_justification: str,
-    primary_key_available: str,
-    delete_handling: str,
-    schema_stability: str,
-    cdc_method: str,
-    source_type: str,
-    data_format: str,
-    additional_gb: float,
-    load_type: str,
-    ingestion_frequency: str,
-    contains_phi: str,
-) -> int:
+def trigger_estimator_job(request_type: str, payload: dict) -> int:
+    """
+    Single entry point for both 'existing_source' and 'new_source' requests.
+    Calls the dispatcher job which routes to the correct estimator notebook.
+    payload must include a non-empty 'request_id' and all fields for that form.
+    """
     run = _client().jobs.run_now(
-        job_id=COST_ESTIMATOR_JOB_ID,
+        job_id=ESTIMATOR_JOB_ID,
         job_parameters={
-            "request_id":             request_id,
-            "business_unit":          business_unit,
-            "request_date":           request_date,
-            "requestor":              requestor,
-            "business_justification": business_justification,
-            "primary_key_available":  primary_key_available,
-            "delete_handling":        delete_handling,
-            "schema_stability":       schema_stability,
-            "cdc_method":             cdc_method,
-            "source_type":            source_type,
-            "data_format":            data_format,
-            "additional_gb":          str(additional_gb),
-            "load_type":              load_type,
-            "ingestion_frequency":    ingestion_frequency,
-            "contains_phi":           contains_phi,
-            "save_results":           "true",
+            "request_type": request_type,
+            "payload":      json.dumps(payload),
         },
     )
     return run.run_id

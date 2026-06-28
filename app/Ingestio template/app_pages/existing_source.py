@@ -14,7 +14,7 @@ from app_config import (
     SOURCE_TYPE_MAP,
     SOURCE_TYPES,
 )
-from databricks_client import trigger_cost_estimate_job
+from databricks_client import trigger_estimator_job
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
 
 
@@ -192,22 +192,26 @@ def render_existing_source_page() -> None:
         request_id = str(uuid.uuid4())
 
         try:
-            trigger_cost_estimate_job(
-                request_id=request_id,
-                business_unit=business_unit,
-                request_date=str(request_date),
-                requestor=requestor,
-                business_justification=business_justification or "",
-                primary_key_available=primary_key_available,
-                delete_handling=delete_handling,
-                schema_stability=schema_stability,
-                cdc_method=cdc_method,
-                source_type=SOURCE_TYPE_MAP[source_type],
-                data_format=data_format,
-                additional_gb=additional_gb,
-                load_type=load_type,
-                ingestion_frequency=ingestion_frequency,
-                contains_phi=contains_phi,
+            trigger_estimator_job(
+                request_type="existing_source",
+                payload={
+                    "request_id":             request_id,
+                    "business_unit":          business_unit,
+                    "request_date":           str(request_date),
+                    "requestor":              requestor,
+                    "business_justification": business_justification or "",
+                    "primary_key_available":  primary_key_available,
+                    "delete_handling":        delete_handling,
+                    "schema_stability":       schema_stability,
+                    "cdc_method":             cdc_method,
+                    "source_type":            SOURCE_TYPE_MAP[source_type],
+                    "data_format":            data_format,
+                    "additional_gb":          str(additional_gb),
+                    "load_type":              load_type,
+                    "ingestion_frequency":    ingestion_frequency,
+                    "contains_phi":           contains_phi,
+                    "save_results":           "true",
+                },
             )
         except Exception as exc:
             st.error(f"Failed to submit request: {exc}")

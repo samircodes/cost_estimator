@@ -9,10 +9,16 @@ REQUEST_HISTORY_PAGE = "request_history"
 
 APP_TITLE = "Ryan | Ingestion Requests"
 
-# Populate COST_ESTIMATOR_JOB_ID after running: databricks bundle deploy
-COST_ESTIMATOR_JOB_ID: int = int(os.environ.get("COST_ESTIMATOR_JOB_ID", "571312722093562"))
-COST_ESTIMATES_TABLE = os.environ.get("COST_ESTIMATES_TABLE", "workspace.default.edh_cost_estimations")
+# ── Dispatcher job (handles both existing-source and new-source requests) ─────
+# Populate after running: databricks bundle deploy
+ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "0"))
 
+# ── Delta tables ──────────────────────────────────────────────────────────────
+COST_ESTIMATES_TABLE      = os.environ.get("COST_ESTIMATES_TABLE",      "edh.ingestion.edh_cost_estimations")
+NEW_SOURCE_REQUESTS_TABLE = os.environ.get("NEW_SOURCE_REQUESTS_TABLE", "edh.ingestion.edh_newsource_requests")
+NEW_SOURCE_ESTIMATIONS_TABLE = os.environ.get("NEW_SOURCE_ESTIMATIONS_TABLE", "edh.ingestion.edh_newsource_estimations")
+
+# ── Existing-source form options ──────────────────────────────────────────────
 SOURCE_TYPES = (
     "Amazon S3",
     "SFTP",
@@ -23,59 +29,110 @@ SOURCE_TYPES = (
 
 # Maps the UI display names to the names expected by the cost estimator notebook
 SOURCE_TYPE_MAP = {
-    "Amazon S3":      "S3",
-    "SFTP":           "SFTP",
-    "SQL (Postgres)": "Postgres",
+    "Amazon S3":        "S3",
+    "SFTP":             "SFTP",
+    "SQL (Postgres)":   "Postgres",
     "SQL (SQL Server)": "SQL Server",
-    "Sybase":         "Sybase",
+    "Sybase":           "Sybase",
 }
 
-INGESTION_MODES = ("Bulk", "CDC")
-
-DATA_FORMATS = ("JDBC Tabular", "CSV", "XLS", "XLSB", "Parquet")
-
-PRIMARY_KEY_OPTIONS      = ("Yes", "No")
+INGESTION_MODES       = ("Bulk", "CDC")
+DATA_FORMATS          = ("JDBC Tabular", "CSV", "XLS", "XLSB", "Parquet")
+PRIMARY_KEY_OPTIONS   = ("Yes", "No")
 DELETE_HANDLING_OPTIONS  = ("Hard", "Soft", "Ignore")
 SCHEMA_STABILITY_OPTIONS = ("Stable", "Occasionally Changes", "Highly Dynamic")
 CDC_METHOD_OPTIONS       = ("Not Applicable", "Timestamp", "Log Based")
 INGESTION_FREQUENCIES    = ("Daily", "Weekly", "Monthly")
 
-FILE_FORMATS = ("CSV", "JSON", "Parquet", "Delta", "Avro", "ORC", "XML")
-
-FREQUENCIES = (
-    "Every Hour",
-    "Every 2 Hours",
-    "Every 3 Hours",
-    "Every 4 Hours",
-    "Every 6 Hours",
-    "Every 8 Hours",
-    "Every 12 Hours",
-    "Daily",
-    "Weekly",
-    "Monthly",
+# ── New-source form options ───────────────────────────────────────────────────
+NETWORK_SOURCE_TYPES = (
+    "azure_same_region",
+    "expressroute_metered",
+    "expressroute_unlimited",
+    "vpn",
+    "aws_s3",
+    "aws_rds",
+    "gcp",
+    "sftp",
+    "api",
+    "cross_region",
 )
 
-TRANSFORMATION_COMPLEXITIES = ("Low", "Medium", "High")
+COPY_INTERVALS = ("bulk", "incremental")
 
-REGIONS = (
-    "us-east-1",
-    "us-east-2",
-    "us-west-1",
-    "us-west-2",
-    "eu-west-1",
-    "eu-central-1",
-    "ap-southeast-1",
-    "ap-northeast-1",
+VM_TYPES = ("Standard_DS3_v2", "Standard_DS5_v2")
+
+DATA_DISTRIBUTIONS = (
+    "Evenly distributed",
+    "Some concentration in a few records",
+    "Highly concentrated in a few records",
+    "Not sure",
 )
 
-CLUSTER_TYPES = ("Job Cluster", "All Purpose", "Serverless")
-
-VM_TYPES = (
-    "Standard_DS3_v2",
-    "Standard_DS5_v2",
+DELIVERY_PATTERNS = (
+    "One large batch file/extract",
+    "Many small files or frequent small batches",
+    "Not sure",
 )
 
-NETWORK_CONNECTIONS = ("VPN", "Direct Connect", "Private Link", "Public Internet")
+PARTITION_KEY_AVAILABILITIES = (
+    "Yes, a clear date/region/key field",
+    "Somewhat",
+    "No clear splitting field",
+    "Not sure",
+)
+
+COMPLEXITY_SOURCE_TYPES = (
+    "internal_sql",
+    "internal_api",
+    "azure_service",
+    "external_sftp",
+    "external_api",
+    "aws_s3",
+    "aws_rds",
+    "gcp",
+    "saas_connector",
+    "legacy_mainframe",
+    "multi_source",
+)
+
+VOLUME_TIERS = ("tiny", "small", "medium", "large", "very_large", "massive")
+
+TRANSFORMATION_LOGICS = (
+    "passthrough",
+    "light_rename_cast",
+    "moderate_joins",
+    "complex_business_rules",
+    "heavy_ml_enrichment",
+    "real_time_streaming",
+)
+
+NEW_SOURCE_FREQUENCIES = (
+    "adhoc",
+    "weekly",
+    "daily",
+    "hourly",
+    "near_real_time",
+    "real_time",
+)
+
+DATA_QUALITY_RULES_OPTIONS = (
+    "none",
+    "basic_nulls",
+    "standard_validation",
+    "complex_cross_table",
+    "regulatory_compliance",
+    "full_reconciliation",
+)
+
+DEPENDENCIES_OPTIONS = (
+    "standalone",
+    "single_upstream",
+    "few_dependencies",
+    "moderate_dag",
+    "complex_dag",
+    "cross_team_multi_system",
+)
 
 
 @dataclass(frozen=True)
