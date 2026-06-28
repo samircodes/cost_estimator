@@ -57,8 +57,8 @@ str_payload = {k: str(v) for k, v in payload.items()}
 # COMMAND ----------
 
 NOTEBOOK_PATHS = {
-    "existing_source": "EDH_Cost_Estimator_Job",
-    "new_source":       "EDH_New_Source_Estimator_Job",
+    "existing_source": "/Workspace/Users/samirwindz007@gmail.com/cost_estimator/app/Ingestio template/notebooks/EDH_Cost_Estimator_Job",
+    "new_source":      "/Workspace/Users/samirwindz007@gmail.com/cost_estimator/app/Ingestio template/notebooks/EDH_New_Source_Estimator_Job",
 }
 
 if request_type not in NOTEBOOK_PATHS:
