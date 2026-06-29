@@ -21,7 +21,7 @@ dbutils.widgets.dropdown("delete_handling",         "Soft",            ["Hard", 
 dbutils.widgets.dropdown("schema_stability",        "Stable",          ["Stable", "Occasionally Changes", "Highly Dynamic"])
 dbutils.widgets.dropdown("cdc_method",              "Not Applicable",  ["Timestamp", "Log Based", "Not Applicable"])
 
-# ---- Cost calculation widgets ----
+# ---- New-source cost calculation widgets ----
 dbutils.widgets.text(    "pipeline_name",       "New EDH Pipeline")
 dbutils.widgets.text(    "source_gb",           "300")
 dbutils.widgets.dropdown("network_source_type", "expressroute_metered",
@@ -61,9 +61,8 @@ dbutils.widgets.dropdown("data_quality_rules", "standard_validation",
 dbutils.widgets.dropdown("dependencies", "few_dependencies",
                          ["standalone", "single_upstream", "few_dependencies", "moderate_dag",
                           "complex_dag", "cross_team_multi_system"])
-dbutils.widgets.text(    "num_resources",       "1")
 
-dbutils.widgets.dropdown("save_results",        "true",  ["true", "false"])
+dbutils.widgets.dropdown("save_results", "true", ["true", "false"])
 
 # COMMAND ----------
 
@@ -122,6 +121,7 @@ VM_SPECS = {
 # SECTION 3: NETWORK COST
 # ============================================================
 
+import pandas as pd
 import math
 from datetime import datetime, timezone
 
@@ -133,18 +133,18 @@ def calculate_network_cost(
 ) -> dict:
 
     RATES = {
-        "azure_same_region":     0.00,
-        "expressroute_metered":  0.025,
+        "azure_same_region":      0.00,
+        "expressroute_metered":   0.025,
         "expressroute_unlimited": 0.00,
-        "vpn":                   0.00,
-        "aws_s3":                0.09,
-        "aws_rds":               0.09,
-        "gcp":                   0.12,
-        "sftp":                  0.00,
-        "api":                   0.00,
-        "private_endpoint":      0.01,
-        "internet_egress":       0.087,
-        "cross_region":          0.02,
+        "vpn":                    0.00,
+        "aws_s3":                 0.09,
+        "aws_rds":                0.09,
+        "gcp":                    0.12,
+        "sftp":                   0.00,
+        "api":                    0.00,
+        "private_endpoint":       0.01,
+        "internet_egress":        0.087,
+        "cross_region":           0.02,
     }
 
     BRONZE_RATIO = 1.0
@@ -302,9 +302,9 @@ def calculate_compute_cost_from_sizing(
     compute_cost_monthly = compute_cost_daily * 30
 
     return {
-        "total_per_node_hr":   round(total_per_node_hr, 4),
-        "cluster_cost_per_hr": round(cluster_cost_per_hr, 4),
-        "compute_cost_daily":  round(compute_cost_daily, 4),
+        "total_per_node_hr":    round(total_per_node_hr, 4),
+        "cluster_cost_per_hr":  round(cluster_cost_per_hr, 4),
+        "compute_cost_daily":   round(compute_cost_daily, 4),
         "compute_cost_monthly": round(compute_cost_monthly, 2),
     }
 
@@ -349,15 +349,17 @@ SCORING_RUBRICS = {
 }
 
 def calculate_complexity_score(
-    source_type, volume, transformation_logic, frequency, data_quality_rules, dependencies
+    source_type: str = 'external_api', volume: str = 'medium',
+    transformation_logic: str = 'moderate_joins', frequency: str = 'daily',
+    data_quality_rules: str = 'standard_validation', dependencies: str = 'few_dependencies',
 ) -> dict:
     scores = {
-        'source_type':        SCORING_RUBRICS['source_type'].get(source_type, 50),
-        'volume':             SCORING_RUBRICS['volume'].get(volume, 50),
+        'source_type':          SCORING_RUBRICS['source_type'].get(source_type, 50),
+        'volume':               SCORING_RUBRICS['volume'].get(volume, 50),
         'transformation_logic': SCORING_RUBRICS['transformation_logic'].get(transformation_logic, 50),
-        'frequency':          SCORING_RUBRICS['frequency'].get(frequency, 50),
-        'data_quality_rules': SCORING_RUBRICS['data_quality_rules'].get(data_quality_rules, 50),
-        'dependencies':       SCORING_RUBRICS['dependencies'].get(dependencies, 50),
+        'frequency':            SCORING_RUBRICS['frequency'].get(frequency, 50),
+        'data_quality_rules':   SCORING_RUBRICS['data_quality_rules'].get(data_quality_rules, 50),
+        'dependencies':         SCORING_RUBRICS['dependencies'].get(dependencies, 50),
     }
     weighted_scores = {k: v * COMPLEXITY_WEIGHTS[k] for k, v in scores.items()}
     total_score     = sum(weighted_scores.values())
@@ -368,9 +370,9 @@ def calculate_complexity_score(
     else:
         level = 'Complex'
     return {
-        'raw_scores':      scores,
-        'weighted_scores': {k: round(v, 1) for k, v in weighted_scores.items()},
-        'total_score':     round(total_score, 1),
+        'raw_scores':       scores,
+        'weighted_scores':  {k: round(v, 1) for k, v in weighted_scores.items()},
+        'total_score':      round(total_score, 1),
         'complexity_level': level,
     }
 
@@ -388,8 +390,10 @@ PHASE_EFFORT = {
 TESTING_PERCENTAGE = 0.25
 
 def estimate_effort(
-    pipeline_name, source_type, volume, transformation_logic, frequency,
-    data_quality_rules, dependencies, num_resources, complexity_override=None,
+    pipeline_name: str = 'New Pipeline', source_type: str = 'external_api', volume: str = 'medium',
+    transformation_logic: str = 'moderate_joins', frequency: str = 'daily',
+    data_quality_rules: str = 'standard_validation', dependencies: str = 'few_dependencies',
+    complexity_override: str = None,
 ) -> dict:
     complexity = calculate_complexity_score(
         source_type=source_type, volume=volume, transformation_logic=transformation_logic,
@@ -416,19 +420,13 @@ def estimate_effort(
     total_max = sum(p['max'] for p in phases.values())
     total_est = sum(p['estimate'] for p in phases.values())
 
-    calendar_min = math.ceil(total_min / num_resources)
-    calendar_max = math.ceil(total_max / num_resources)
-    calendar_est = math.ceil(total_est / num_resources)
-
     return {
-        'pipeline_name':    pipeline_name,
-        'complexity':       complexity,
-        'complexity_level': level,
-        'phases':           phases,
-        'build_subtotal':   {'min': build_min, 'max': build_max, 'estimate': build_est},
-        'total_effort_days':      {'min': total_min, 'max': total_max, 'estimate': total_est},
-        'calendar_duration_days': {'min': calendar_min, 'max': calendar_max, 'estimate': calendar_est},
-        'num_resources':    num_resources,
+        'pipeline_name':     pipeline_name,
+        'complexity':        complexity,
+        'complexity_level':  level,
+        'phases':            phases,
+        'build_subtotal':    {'min': build_min, 'max': build_max, 'estimate': build_est},
+        'total_effort_days': {'min': total_min, 'max': total_max, 'estimate': total_est},
     }
 
 # COMMAND ----------
@@ -438,7 +436,7 @@ def estimate_effort(
 # ============================================================
 
 def validate_inputs(source_gb, copy_interval, network_source_type,
-                    sla_time_hr, num_resources, contains_phi, delete_handling,
+                    sla_time_hr, contains_phi, delete_handling,
                     schema_stability, cdc_method, complexity_source_type,
                     volume_tier, transformation_logic, frequency,
                     data_quality_rules, dependencies, vm_type,
@@ -459,8 +457,6 @@ def validate_inputs(source_gb, copy_interval, network_source_type,
         raise ValueError("copy_interval must be 'bulk' or 'incremental'")
     if sla_time_hr <= 0:
         raise ValueError("sla_time_hr must be greater than 0")
-    if num_resources <= 0:
-        raise ValueError("num_resources must be greater than 0")
     if contains_phi not in ["Yes", "No"]:
         raise ValueError("contains_phi must be Yes or No")
     if delete_handling not in ["Hard", "Soft", "Ignore"]:
@@ -480,7 +476,10 @@ def validate_inputs(source_gb, copy_interval, network_source_type,
     if transformation_logic not in SCORING_RUBRICS['transformation_logic']:
         raise ValueError(f"Invalid transformation_logic.")
     if transformation_logic not in COMPLEXITY_FACTOR_BY_TRANSFORMATION:
-        raise ValueError(f"transformation_logic '{transformation_logic}' has no matching COMPLEXITY_FACTOR_BY_TRANSFORMATION entry.")
+        raise ValueError(
+            f"transformation_logic '{transformation_logic}' has no matching "
+            f"COMPLEXITY_FACTOR_BY_TRANSFORMATION entry - lookup tables are out of sync."
+        )
     if frequency not in SCORING_RUBRICS['frequency']:
         raise ValueError(f"Invalid frequency.")
     if data_quality_rules not in SCORING_RUBRICS['data_quality_rules']:
@@ -522,12 +521,11 @@ transformation_logic   = dbutils.widgets.get("transformation_logic")
 frequency              = dbutils.widgets.get("frequency")
 data_quality_rules     = dbutils.widgets.get("data_quality_rules")
 dependencies           = dbutils.widgets.get("dependencies")
-num_resources          = int(dbutils.widgets.get("num_resources"))
 
 save_results = dbutils.widgets.get("save_results").lower() == "true"
 
 validate_inputs(source_gb, copy_interval, network_source_type,
-                sla_time_hr, num_resources, contains_phi, delete_handling,
+                sla_time_hr, contains_phi, delete_handling,
                 schema_stability, cdc_method, complexity_source_type,
                 volume_tier, transformation_logic, frequency,
                 data_quality_rules, dependencies, vm_type,
@@ -574,7 +572,6 @@ effort = estimate_effort(
     pipeline_name=pipeline_name, source_type=complexity_source_type, volume=volume_tier,
     transformation_logic=transformation_logic, frequency=frequency,
     data_quality_rules=data_quality_rules, dependencies=dependencies,
-    num_resources=num_resources,
 )
 
 # COMMAND ----------
@@ -615,14 +612,12 @@ print(f"{'-' * 70}")
 print(f"  Complexity        : {effort['complexity_level']} (score {effort['complexity']['total_score']}/100)")
 print(f"  Total Effort      : {effort['total_effort_days']['estimate']} person-days "
       f"({effort['total_effort_days']['min']}-{effort['total_effort_days']['max']} range)")
-print(f"  Calendar Duration : {effort['calendar_duration_days']['estimate']} days "
-      f"with {num_resources} resource(s)")
 print("=" * 70)
 
 # COMMAND ----------
 
 # ============================================================
-# SECTION 11: SAVE RAW REQUEST TO DELTA
+# SECTION 11: SAVE RAW REQUEST TO DELTA (table 1 of 2)
 # ============================================================
 
 from pyspark.sql.types import (
@@ -657,7 +652,6 @@ request_schema = StructType([
     StructField("frequency",                   StringType(),    True),
     StructField("data_quality_rules",          StringType(),    True),
     StructField("dependencies",                StringType(),    True),
-    StructField("num_resources",               IntegerType(),   True),
 ])
 
 request_row = [(
@@ -668,7 +662,7 @@ request_row = [(
     copy_interval, bool(include_egress), float(egress_gb), float(sla_time_hr), vm_type,
     data_distribution, delivery_pattern, partition_key_availability,
     complexity_source_type, volume_tier, transformation_logic, frequency,
-    data_quality_rules, dependencies, int(num_resources),
+    data_quality_rules, dependencies,
 )]
 
 if save_results:
@@ -680,7 +674,7 @@ if save_results:
 # COMMAND ----------
 
 # ============================================================
-# SECTION 12: SAVE RESULTS TO DELTA
+# SECTION 12: SAVE FINAL RESULT TABLE FOR DASHBOARD (table 2 of 2)
 # ============================================================
 
 result_schema = StructType([
@@ -721,10 +715,6 @@ result_schema = StructType([
     StructField("total_effort_days_min",           DoubleType(),    True),
     StructField("total_effort_days_estimate",      DoubleType(),    True),
     StructField("total_effort_days_max",           DoubleType(),    True),
-    StructField("calendar_duration_days_min",      IntegerType(),   True),
-    StructField("calendar_duration_days_estimate", IntegerType(),   True),
-    StructField("calendar_duration_days_max",      IntegerType(),   True),
-    StructField("num_resources",                   IntegerType(),   True),
 ])
 
 p = effort["phases"]
@@ -758,10 +748,6 @@ result_row = [(
     float(effort["total_effort_days"]["min"]),
     float(effort["total_effort_days"]["estimate"]),
     float(effort["total_effort_days"]["max"]),
-    int(effort["calendar_duration_days"]["min"]),
-    int(effort["calendar_duration_days"]["estimate"]),
-    int(effort["calendar_duration_days"]["max"]),
-    int(num_resources),
 )]
 
 if save_results:
@@ -769,5 +755,73 @@ if save_results:
     df_result.write.format("delta").mode("append").option("mergeSchema", "true") \
         .saveAsTable("edh.ingestion.edh_newsource_estimations")
     print(f"Saved results to edh.ingestion.edh_newsource_estimations - request_id={request_id}")
+
+# COMMAND ----------
+
+# ============================================================
+# SECTION 13: SAVE TO COMBINED RESULT TABLE (both ingestion types)
+# ============================================================
+
+VARIANCE_FACTOR = 0.20
+
+def apply_variance(value, variance=VARIANCE_FACTOR):
+    return round(value * (1 - variance), 2), round(value * (1 + variance), 2)
+
+combined_compute_low,    combined_compute_high    = apply_variance(compute["compute_cost_monthly"])
+combined_storage_low,    combined_storage_high    = apply_variance(storage["grand_total_monthly"])
+combined_networking_low, combined_networking_high = apply_variance(network["total_monthly_cost"])
+combined_total_low,      combined_total_high      = apply_variance(total_monthly_cost)
+combined_annual_low,     combined_annual_high     = apply_variance(total_annual_cost)
+
+from pyspark.sql.types import TimestampType as _TS  # already imported above; re-reference to avoid re-import noise
+
+combined_schema = StructType([
+    StructField("request_id",              StringType(),    True),
+    StructField("estimation_timestamp",    TimestampType(), True),
+    StructField("ingestion_type",          StringType(),    True),
+    StructField("business_unit",           StringType(),    True),
+    StructField("requestor",               StringType(),    True),
+    StructField("request_date",            StringType(),    True),
+    StructField("contains_phi",            StringType(),    True),
+    StructField("compute_cost_monthly",    DoubleType(),    True),
+    StructField("compute_cost_low",        DoubleType(),    True),
+    StructField("compute_cost_high",       DoubleType(),    True),
+    StructField("storage_cost_monthly",    DoubleType(),    True),
+    StructField("storage_cost_low",        DoubleType(),    True),
+    StructField("storage_cost_high",       DoubleType(),    True),
+    StructField("networking_cost_monthly", DoubleType(),    True),
+    StructField("networking_cost_low",     DoubleType(),    True),
+    StructField("networking_cost_high",    DoubleType(),    True),
+    StructField("total_cost_monthly",      DoubleType(),    True),
+    StructField("total_cost_monthly_low",  DoubleType(),    True),
+    StructField("total_cost_monthly_high", DoubleType(),    True),
+    StructField("total_cost_annual",       DoubleType(),    True),
+    StructField("total_cost_annual_low",   DoubleType(),    True),
+    StructField("total_cost_annual_high",  DoubleType(),    True),
+])
+
+combined_row = [(
+    request_id,
+    datetime.now(timezone.utc),
+    "New Source",
+    business_unit,
+    requestor,
+    request_date,
+    contains_phi,
+    float(compute["compute_cost_monthly"]),     float(combined_compute_low),    float(combined_compute_high),
+    float(storage["grand_total_monthly"]),      float(combined_storage_low),    float(combined_storage_high),
+    float(network["total_monthly_cost"]),       float(combined_networking_low), float(combined_networking_high),
+    float(total_monthly_cost),                  float(combined_total_low),      float(combined_total_high),
+    float(total_annual_cost),                   float(combined_annual_low),     float(combined_annual_high),
+)]
+
+if save_results:
+    df_combined = spark.createDataFrame(combined_row, combined_schema)
+    df_combined.write \
+      .format("delta") \
+      .mode("append") \
+      .option("mergeSchema", "true") \
+      .saveAsTable("edh.ingestion.edh_combined_estimations")
+    print(f"Saved to edh.ingestion.edh_combined_estimations - request_id={request_id}")
 else:
-    print("save_results=false - skipping both Delta table writes.")
+    print("save_results=false - skipping all Delta table writes.")

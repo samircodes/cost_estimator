@@ -14,9 +14,10 @@ APP_TITLE = "Ryan | Ingestion Requests"
 ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "843013258339321"))
 
 # ── Delta tables ──────────────────────────────────────────────────────────────
-COST_ESTIMATES_TABLE      = os.environ.get("COST_ESTIMATES_TABLE",      "edh.ingestion.edh_cost_estimations")
-NEW_SOURCE_REQUESTS_TABLE = os.environ.get("NEW_SOURCE_REQUESTS_TABLE", "edh.ingestion.edh_newsource_requests")
+COST_ESTIMATES_TABLE         = os.environ.get("COST_ESTIMATES_TABLE",         "edh.ingestion.edh_cost_estimations")
+NEW_SOURCE_REQUESTS_TABLE    = os.environ.get("NEW_SOURCE_REQUESTS_TABLE",    "edh.ingestion.edh_newsource_requests")
 NEW_SOURCE_ESTIMATIONS_TABLE = os.environ.get("NEW_SOURCE_ESTIMATIONS_TABLE", "edh.ingestion.edh_newsource_estimations")
+COMBINED_ESTIMATIONS_TABLE   = os.environ.get("COMBINED_ESTIMATIONS_TABLE",   "edh.ingestion.edh_combined_estimations")
 
 # ── Existing-source form options ──────────────────────────────────────────────
 SOURCE_TYPES = (

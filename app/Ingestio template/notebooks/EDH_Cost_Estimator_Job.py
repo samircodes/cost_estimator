@@ -1,6 +1,6 @@
 # Databricks notebook source
 # EDH Incremental Cost Estimator
-# Triggered by the Ingestio app - reads inputs via widgets,
+# Triggered by the Ingestio app — reads inputs via widgets,
 # runs full cost calculation, and writes results to Delta table.
 
 # COMMAND ----------
@@ -235,8 +235,120 @@ def calculate_networking_cost(source_type, data_format, additional_gb, runs_per_
 # COMMAND ----------
 
 # ============================================================
-# SECTION 6: RANGE CALCULATION (+-20%)
+# SECTION 6: EFFORT ESTIMATION
 # ============================================================
+
+EXISTING_COMPLEXITY_WEIGHTS = {
+    'cdc_method':             0.30,
+    'schema_stability':       0.25,
+    'data_format':            0.15,
+    'primary_key_available':  0.15,
+    'delete_handling':        0.15,
+}
+
+EXISTING_SCORING_RUBRICS = {
+    'cdc_method': {
+        'Not Applicable': 15,
+        'Timestamp':       45,
+        'Log Based':       75,
+    },
+    'schema_stability': {
+        'Stable':                15,
+        'Occasionally Changes':  45,
+        'Highly Dynamic':        80,
+    },
+    'data_format': {
+        'JDBC Tabular': 15,
+        'Parquet':      15,
+        'CSV':          35,
+        'XLS':          50,
+        'XLSB':         50,
+    },
+    'primary_key_available': {
+        'Yes': 15,
+        'No':  60,
+    },
+    'delete_handling': {
+        'Ignore': 15,
+        'Soft':   40,
+        'Hard':   65,
+    },
+}
+
+def calculate_existing_complexity_score(
+    cdc_method: str, schema_stability: str, data_format: str,
+    primary_key_available: str, delete_handling: str,
+) -> dict:
+    scores = {
+        'cdc_method':             EXISTING_SCORING_RUBRICS['cdc_method'].get(cdc_method, 50),
+        'schema_stability':       EXISTING_SCORING_RUBRICS['schema_stability'].get(schema_stability, 50),
+        'data_format':            EXISTING_SCORING_RUBRICS['data_format'].get(data_format, 50),
+        'primary_key_available':  EXISTING_SCORING_RUBRICS['primary_key_available'].get(primary_key_available, 50),
+        'delete_handling':        EXISTING_SCORING_RUBRICS['delete_handling'].get(delete_handling, 50),
+    }
+    weighted_scores = {k: v * EXISTING_COMPLEXITY_WEIGHTS[k] for k, v in scores.items()}
+    total_score = sum(weighted_scores.values())
+    if total_score <= 30:
+        level = 'Simple'
+    elif total_score <= 70:
+        level = 'Medium'
+    else:
+        level = 'Complex'
+    return {
+        'raw_scores': scores,
+        'weighted_scores': {k: round(v, 1) for k, v in weighted_scores.items()},
+        'total_score': round(total_score, 1),
+        'complexity_level': level,
+    }
+
+
+EXISTING_PHASE_EFFORT = {
+    'discovery':            {'Simple': {'min': 1, 'max': 2}, 'Medium': {'min': 2, 'max': 3}, 'Complex': {'min': 3, 'max': 5}},
+    'build_ingestion':      {'Simple': {'min': 1, 'max': 2}, 'Medium': {'min': 2, 'max': 4}, 'Complex': {'min': 4, 'max': 6}},
+    'build_transformation': {'Simple': {'min': 1, 'max': 3}, 'Medium': {'min': 3, 'max': 5}, 'Complex': {'min': 5, 'max': 8}},
+    'deployment':           {'Simple': {'min': 1, 'max': 1}, 'Medium': {'min': 1, 'max': 2}, 'Complex': {'min': 2, 'max': 3}},
+    'documentation':        {'Simple': {'min': 1, 'max': 1}, 'Medium': {'min': 1, 'max': 2}, 'Complex': {'min': 2, 'max': 2}},
+}
+
+EXISTING_TESTING_PERCENTAGE = 0.25
+
+def estimate_existing_effort(
+    cdc_method: str, schema_stability: str, data_format: str,
+    primary_key_available: str, delete_handling: str,
+    complexity_override: str = None,
+) -> dict:
+    complexity = calculate_existing_complexity_score(
+        cdc_method=cdc_method, schema_stability=schema_stability, data_format=data_format,
+        primary_key_available=primary_key_available, delete_handling=delete_handling,
+    )
+    level = complexity_override if complexity_override in ['Simple', 'Medium', 'Complex'] else complexity['complexity_level']
+
+    phases = {}
+    for phase, ranges in EXISTING_PHASE_EFFORT.items():
+        r = ranges[level]
+        midpoint = (r['min'] + r['max']) / 2
+        phases[phase] = {'min': r['min'], 'max': r['max'], 'estimate': midpoint}
+
+    build_min = phases['build_ingestion']['min'] + phases['build_transformation']['min']
+    build_max = phases['build_ingestion']['max'] + phases['build_transformation']['max']
+    build_est = phases['build_ingestion']['estimate'] + phases['build_transformation']['estimate']
+
+    testing_min = math.ceil(build_min * EXISTING_TESTING_PERCENTAGE)
+    testing_max = math.ceil(build_max * EXISTING_TESTING_PERCENTAGE)
+    testing_est = round(build_est * EXISTING_TESTING_PERCENTAGE, 1)
+    phases['testing'] = {'min': testing_min, 'max': testing_max, 'estimate': testing_est}
+
+    total_min = sum(p['min'] for p in phases.values())
+    total_max = sum(p['max'] for p in phases.values())
+    total_est = sum(p['estimate'] for p in phases.values())
+
+    return {
+        'complexity': complexity, 'complexity_level': level,
+        'phases': phases,
+        'build_subtotal': {'min': build_min, 'max': build_max, 'estimate': build_est},
+        'total_effort_days': {'min': total_min, 'max': total_max, 'estimate': total_est},
+    }
+
 
 def apply_variance(value, variance=VARIANCE_FACTOR):
     return round(value * (1 - variance), 2), round(value * (1 + variance), 2)
@@ -309,12 +421,6 @@ def estimate_cost(
     )
     total_annual_cost = round(total_monthly_cost * 12, 2)
 
-    compute_low,    compute_high    = apply_variance(compute["total_compute"])
-    storage_low,    storage_high    = apply_variance(storage["total_storage"])
-    networking_low, networking_high = apply_variance(networking["networking_cost"])
-    total_low,      total_high      = apply_variance(total_monthly_cost)
-    annual_low,     annual_high     = apply_variance(total_annual_cost)
-
     return {
         "business_unit":          business_unit,
         "request_date":           request_date,
@@ -343,25 +449,15 @@ def estimate_cost(
         "total_dbu_cost":         compute["total_dbu_cost"],
         "total_vm_cost":          compute["total_vm_cost"],
         "compute_cost":           compute["total_compute"],
-        "compute_low":            compute_low,
-        "compute_high":           compute_high,
         "compression_ratio":      storage["compression_ratio"],
         "compressed_gb":          storage["compressed_gb"],
         "data_storage_cost":      storage["data_storage_cost"],
         "transaction_cost":       storage["transaction_cost"],
         "storage_cost":           storage["total_storage"],
-        "storage_low":            storage_low,
-        "storage_high":           storage_high,
         "network_multiplier":     networking["network_multiplier"],
         "networking_cost":        networking["networking_cost"],
-        "networking_low":         networking_low,
-        "networking_high":        networking_high,
         "total_monthly_cost":     total_monthly_cost,
-        "total_low":              total_low,
-        "total_high":             total_high,
         "total_annual_cost":      total_annual_cost,
-        "annual_low":             annual_low,
-        "annual_high":            annual_high,
     }
 
 # COMMAND ----------
@@ -410,6 +506,14 @@ result = estimate_cost(
     ingestion_frequency    = ingestion_frequency,
 )
 
+effort = estimate_existing_effort(
+    cdc_method            = cdc_method,
+    schema_stability      = schema_stability,
+    data_format           = data_format,
+    primary_key_available = primary_key_available,
+    delete_handling       = delete_handling,
+)
+
 # COMMAND ----------
 
 # ============================================================
@@ -439,7 +543,7 @@ print(f"  Load Type        : {result['load_type']}")
 print(f"  Frequency        : {result['ingestion_frequency']}")
 print(f"  Runs Per Month   : {result['runs_per_month']}")
 print(f"  Layers           : {result['layers']}")
-print(f"\n{'─' * 65}")
+print(f"\n{'-' * 65}")
 print(f"  COMPUTE")
 print(f"  Workers          : {result['workers']}")
 print(f"  Ingestion DBU/hr : {result['ingestion_dbu_hr']}")
@@ -451,20 +555,25 @@ print(f"  VM cost          : ${result['total_vm_cost']}")
 print(f"  Ingestion Runtime: {result['runtime_hrs']} hrs")
 print(f"  Ingestion Cost   : ${result['ingestion_cost']}")
 print(f"  Transform Cost   : ${result['transformation_cost']}")
-print(f"  Total Compute    : ${result['compute_cost']}  (${result['compute_low']} – ${result['compute_high']})")
-print(f"\n{'─' * 65}")
+print(f"  Total Compute    : ${result['compute_cost']}")
+print(f"\n{'-' * 65}")
 print(f"  STORAGE")
 print(f"  Compressed GB    : {result['compressed_gb']} GB")
 print(f"  Data Storage     : ${result['data_storage_cost']}")
 print(f"  Transactions     : ${result['transaction_cost']}")
-print(f"  Total Storage    : ${result['storage_cost']}  (${result['storage_low']} – ${result['storage_high']})")
-print(f"\n{'─' * 65}")
+print(f"  Total Storage    : ${result['storage_cost']}")
+print(f"\n{'-' * 65}")
 print(f"  NETWORKING")
 print(f"  Network Mult.    : {result['network_multiplier']}x")
-print(f"  Total Networking : ${result['networking_cost']}  (${result['networking_low']} – ${result['networking_high']})")
+print(f"  Total Networking : ${result['networking_cost']}")
+print(f"\n{'-' * 65}")
+print(f"  EFFORT ESTIMATE")
+print(f"  Complexity       : {effort['complexity_level']} (score {effort['complexity']['total_score']}/100)")
+print(f"  Total Effort     : {effort['total_effort_days']['estimate']} person-days "
+      f"({effort['total_effort_days']['min']}-{effort['total_effort_days']['max']} range)")
 print(f"\n{'=' * 65}")
-print(f"  MONTHLY TOTAL    : ${result['total_monthly_cost']}  (${result['total_low']} – ${result['total_high']})")
-print(f"  ANNUAL TOTAL     : ${result['total_annual_cost']}  (${result['annual_low']} – ${result['annual_high']})")
+print(f"  MONTHLY TOTAL    : ${result['total_monthly_cost']}")
+print(f"  ANNUAL TOTAL     : ${result['total_annual_cost']}")
 print(f"{'=' * 65}")
 
 # COMMAND ----------
@@ -509,25 +618,26 @@ schema = StructType([
     StructField("ingestion_cost",         DoubleType(),    True),
     StructField("transformation_cost",    DoubleType(),    True),
     StructField("compute_cost",           DoubleType(),    True),
-    StructField("compute_low",            DoubleType(),    True),
-    StructField("compute_high",           DoubleType(),    True),
     StructField("compression_ratio",      DoubleType(),    True),
     StructField("compressed_gb",          DoubleType(),    True),
     StructField("data_storage_cost",      DoubleType(),    True),
     StructField("transaction_cost",       DoubleType(),    True),
     StructField("storage_cost",           DoubleType(),    True),
-    StructField("storage_low",            DoubleType(),    True),
-    StructField("storage_high",           DoubleType(),    True),
     StructField("network_multiplier",     DoubleType(),    True),
     StructField("networking_cost",        DoubleType(),    True),
-    StructField("networking_low",         DoubleType(),    True),
-    StructField("networking_high",        DoubleType(),    True),
     StructField("total_monthly_cost",     DoubleType(),    True),
-    StructField("total_low",              DoubleType(),    True),
-    StructField("total_high",             DoubleType(),    True),
     StructField("total_annual_cost",      DoubleType(),    True),
-    StructField("annual_low",             DoubleType(),    True),
-    StructField("annual_high",            DoubleType(),    True),
+    StructField("effort_complexity_score",          DoubleType(), True),
+    StructField("effort_complexity_level",          StringType(), True),
+    StructField("effort_discovery_days",            DoubleType(), True),
+    StructField("effort_build_ingestion_days",      DoubleType(), True),
+    StructField("effort_build_transformation_days", DoubleType(), True),
+    StructField("effort_testing_days",              DoubleType(), True),
+    StructField("effort_deployment_days",           DoubleType(), True),
+    StructField("effort_documentation_days",        DoubleType(), True),
+    StructField("effort_total_days_min",            DoubleType(), True),
+    StructField("effort_total_days_estimate",       DoubleType(), True),
+    StructField("effort_total_days_max",            DoubleType(), True),
 ])
 
 row = [(
@@ -560,25 +670,26 @@ row = [(
     float(result["ingestion_cost"]),
     float(result["transformation_cost"]),
     float(result["compute_cost"]),
-    float(result["compute_low"]),
-    float(result["compute_high"]),
     float(result["compression_ratio"]),
     float(result["compressed_gb"]),
     float(result["data_storage_cost"]),
     float(result["transaction_cost"]),
     float(result["storage_cost"]),
-    float(result["storage_low"]),
-    float(result["storage_high"]),
     float(result["network_multiplier"]),
     float(result["networking_cost"]),
-    float(result["networking_low"]),
-    float(result["networking_high"]),
     float(result["total_monthly_cost"]),
-    float(result["total_low"]),
-    float(result["total_high"]),
     float(result["total_annual_cost"]),
-    float(result["annual_low"]),
-    float(result["annual_high"]),
+    float(effort["complexity"]["total_score"]),
+    effort["complexity_level"],
+    float(effort["phases"]["discovery"]["estimate"]),
+    float(effort["phases"]["build_ingestion"]["estimate"]),
+    float(effort["phases"]["build_transformation"]["estimate"]),
+    float(effort["phases"]["testing"]["estimate"]),
+    float(effort["phases"]["deployment"]["estimate"]),
+    float(effort["phases"]["documentation"]["estimate"]),
+    float(effort["total_effort_days"]["min"]),
+    float(effort["total_effort_days"]["estimate"]),
+    float(effort["total_effort_days"]["max"]),
 )]
 
 if save_results:
@@ -591,3 +702,64 @@ if save_results:
     print(f"Saved to edh.ingestion.edh_cost_estimations — request_id={request_id}")
 else:
     print("save_results=false — skipping Delta table write.")
+
+# COMMAND ----------
+
+# ============================================================
+# SECTION 13: SAVE TO COMBINED RESULT TABLE (both ingestion types)
+# ============================================================
+
+combined_compute_low,    combined_compute_high    = apply_variance(result["compute_cost"])
+combined_storage_low,    combined_storage_high    = apply_variance(result["storage_cost"])
+combined_networking_low, combined_networking_high = apply_variance(result["networking_cost"])
+combined_total_low,      combined_total_high      = apply_variance(result["total_monthly_cost"])
+combined_annual_low,     combined_annual_high     = apply_variance(result["total_annual_cost"])
+
+combined_schema = StructType([
+    StructField("request_id",              StringType(),    True),
+    StructField("estimation_timestamp",    TimestampType(), True),
+    StructField("ingestion_type",          StringType(),    True),
+    StructField("business_unit",           StringType(),    True),
+    StructField("requestor",               StringType(),    True),
+    StructField("request_date",            StringType(),    True),
+    StructField("contains_phi",            StringType(),    True),
+    StructField("compute_cost_monthly",    DoubleType(),    True),
+    StructField("compute_cost_low",        DoubleType(),    True),
+    StructField("compute_cost_high",       DoubleType(),    True),
+    StructField("storage_cost_monthly",    DoubleType(),    True),
+    StructField("storage_cost_low",        DoubleType(),    True),
+    StructField("storage_cost_high",       DoubleType(),    True),
+    StructField("networking_cost_monthly", DoubleType(),    True),
+    StructField("networking_cost_low",     DoubleType(),    True),
+    StructField("networking_cost_high",    DoubleType(),    True),
+    StructField("total_cost_monthly",      DoubleType(),    True),
+    StructField("total_cost_monthly_low",  DoubleType(),    True),
+    StructField("total_cost_monthly_high", DoubleType(),    True),
+    StructField("total_cost_annual",       DoubleType(),    True),
+    StructField("total_cost_annual_low",   DoubleType(),    True),
+    StructField("total_cost_annual_high",  DoubleType(),    True),
+])
+
+combined_row = [(
+    request_id,
+    datetime.now(timezone.utc),
+    "Existing Source",
+    result["business_unit"],
+    result["requestor"],
+    result["request_date"],
+    result["contains_phi"],
+    float(result["compute_cost"]),       float(combined_compute_low),    float(combined_compute_high),
+    float(result["storage_cost"]),       float(combined_storage_low),    float(combined_storage_high),
+    float(result["networking_cost"]),    float(combined_networking_low), float(combined_networking_high),
+    float(result["total_monthly_cost"]), float(combined_total_low),      float(combined_total_high),
+    float(result["total_annual_cost"]),  float(combined_annual_low),     float(combined_annual_high),
+)]
+
+if save_results:
+    df_combined = spark.createDataFrame(combined_row, combined_schema)
+    df_combined.write \
+      .format("delta") \
+      .mode("append") \
+      .option("mergeSchema", "true") \
+      .saveAsTable("edh.ingestion.edh_combined_estimations")
+    print(f"Saved to edh.ingestion.edh_combined_estimations — request_id={request_id}")

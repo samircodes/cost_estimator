@@ -7,7 +7,7 @@ from databricks.sdk.service.sql import StatementState
 
 import json
 
-from app_config import COST_ESTIMATES_TABLE, ESTIMATOR_JOB_ID
+from app_config import COMBINED_ESTIMATIONS_TABLE, ESTIMATOR_JOB_ID
 
 
 def _client() -> WorkspaceClient:
@@ -50,44 +50,32 @@ def wait_for_run(run_id: int, timeout_seconds: int = 300) -> tuple[bool, str]:
     return False, f"Timed out after {timeout_seconds}s"
 
 
-COLS = [
+COMBINED_COLS = [
     "request_id",
     "estimation_timestamp",
-    # Metadata
+    "ingestion_type",
     "business_unit",
-    "request_date",
     "requestor",
-    "business_justification",
-    "primary_key_available",
-    "delete_handling",
-    "schema_stability",
-    "cdc_method",
-    # Calculation inputs
-    "source_type",
-    "data_format",
-    "additional_gb",
-    "load_type",
-    "ingestion_frequency",
-    "layers",
-    # Cost totals
-    "compute_cost",
-    "compute_low",
-    "compute_high",
-    "storage_cost",
-    "storage_low",
-    "storage_high",
-    "networking_cost",
-    "networking_low",
-    "networking_high",
-    "total_monthly_cost",
-    "total_low",
-    "total_high",
-    "total_annual_cost",
-    "annual_low",
-    "annual_high",
+    "request_date",
+    "contains_phi",
+    "compute_cost_monthly",
+    "compute_cost_low",
+    "compute_cost_high",
+    "storage_cost_monthly",
+    "storage_cost_low",
+    "storage_cost_high",
+    "networking_cost_monthly",
+    "networking_cost_low",
+    "networking_cost_high",
+    "total_cost_monthly",
+    "total_cost_monthly_low",
+    "total_cost_monthly_high",
+    "total_cost_annual",
+    "total_cost_annual_low",
+    "total_cost_annual_high",
 ]
 
-_SELECT = ", ".join(COLS)
+_SELECT = ", ".join(COMBINED_COLS)
 
 
 def _run_query(client: WorkspaceClient, statement: str) -> list[list]:
@@ -107,20 +95,20 @@ def fetch_cost_estimate(request_id: str) -> dict[str, Any] | None:
     client = _client()
     rows = _run_query(
         client,
-        f"SELECT {_SELECT} FROM {COST_ESTIMATES_TABLE} "
+        f"SELECT {_SELECT} FROM {COMBINED_ESTIMATIONS_TABLE} "
         f"WHERE request_id = '{request_id}' LIMIT 1",
     )
-    return dict(zip(COLS, rows[0])) if rows else None
+    return dict(zip(COMBINED_COLS, rows[0])) if rows else None
 
 
 def fetch_all_estimates() -> list[dict[str, Any]]:
     client = _client()
     rows = _run_query(
         client,
-        f"SELECT {_SELECT} FROM {COST_ESTIMATES_TABLE} "
+        f"SELECT {_SELECT} FROM {COMBINED_ESTIMATIONS_TABLE} "
         f"ORDER BY estimation_timestamp DESC",
     )
-    return [dict(zip(COLS, row)) for row in rows]
+    return [dict(zip(COMBINED_COLS, row)) for row in rows]
 
 
 def _get_warehouse_id(client: WorkspaceClient) -> str:

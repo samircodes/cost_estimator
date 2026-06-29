@@ -35,7 +35,7 @@ def render_new_ingestion_page() -> None:
         "Provide the details needed to register and onboard a new data source into EDH.",
     )
 
-    render_form_heading("New Source Details", 26)
+    render_form_heading("New Source Details", 25)
 
     with st.form("new_ingestion_request"):
 
@@ -281,25 +281,14 @@ def render_new_ingestion_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_y, col_z = st.columns(2, gap="large")
-        with col_y:
-            render_field_intro(25, "Dependencies", "How many upstream dependencies does this pipeline have?")
-            dependencies = st.selectbox(
-                "Dependencies",
-                options=DEPENDENCIES_OPTIONS,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
-        with col_z:
-            render_field_intro(26, "Resources", "How many engineers will work on this?")
-            num_resources = st.number_input(
-                "Resources",
-                min_value=1,
-                value=1,
-                step=1,
-                label_visibility="collapsed",
-            )
+        render_field_intro(25, "Dependencies", "How many upstream dependencies does this pipeline have?")
+        dependencies = st.selectbox(
+            "Dependencies",
+            options=DEPENDENCIES_OPTIONS,
+            index=None,
+            placeholder="Select",
+            label_visibility="collapsed",
+        )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         submitted = st.form_submit_button(
@@ -374,7 +363,6 @@ def render_new_ingestion_page() -> None:
                     "frequency":                   frequency,
                     "data_quality_rules":          data_quality_rules,
                     "dependencies":                dependencies,
-                    "num_resources":               str(num_resources),
                     "save_results":                "true",
                 },
             )
