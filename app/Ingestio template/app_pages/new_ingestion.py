@@ -154,9 +154,9 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_m, col_n = st.columns(2, gap="large")
         with col_m:
-            render_field_intro(13, "Copy interval", "Please select whether this is a full reload each time (Bulk) or only changed records (Incremental)")
+            render_field_intro(13, "Load type", "Please select whether this is a full reload each time (Bulk) or only changed records (Incremental)")
             copy_interval = st.selectbox(
-                "Copy interval",
+                "Load type",
                 options=COPY_INTERVALS,
                 index=None,
                 placeholder="Select",
@@ -271,7 +271,7 @@ def render_new_ingestion_page() -> None:
                 ("CDC method", cdc_method),
                 ("Pipeline name", pipeline_name),
                 ("Network source type", network_source_type),
-                ("Copy interval", copy_interval),
+                ("Load type", copy_interval),
                 ("VM type", vm_type),
                 ("Egress", include_egress_raw),
                 ("Data distribution", data_distribution),
@@ -287,10 +287,10 @@ def render_new_ingestion_page() -> None:
             return
 
         if copy_interval == "incremental" and cdc_method == "Not Applicable":
-            st.error("CDC Method cannot be 'Not Applicable' when Copy Interval is 'incremental'.")
+            st.error("CDC Method cannot be 'Not Applicable' when Load Type is 'incremental'.")
             return
         if copy_interval == "bulk" and cdc_method != "Not Applicable":
-            st.error("CDC Method should be 'Not Applicable' when Copy Interval is 'bulk'.")
+            st.error("CDC Method should be 'Not Applicable' when Load Type is 'bulk'.")
             return
 
         request_id = str(uuid.uuid4())
