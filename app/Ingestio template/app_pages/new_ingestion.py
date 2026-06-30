@@ -39,12 +39,12 @@ def render_new_ingestion_page() -> None:
         # ── Section 0: Request metadata ───────────────────────────────────────
         col_a, col_b = st.columns(2, gap="large")
         with col_a:
-            render_field_intro(1, "Business unit", "Which department is making this request?")
+            render_field_intro(1, "Business unit", "Please fill the name for your business unit")
             business_unit = st.text_input(
                 "Business unit", placeholder="e.g. Finance", label_visibility="collapsed"
             )
         with col_b:
-            render_field_intro(2, "Requestor", "Who is submitting this request?")
+            render_field_intro(2, "Requestor", "Please fill your name")
             requestor = st.text_input(
                 "Requestor", placeholder="e.g. John Smith", label_visibility="collapsed"
             )
@@ -52,12 +52,12 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_c, col_d = st.columns(2, gap="large")
         with col_c:
-            render_field_intro(3, "Request date", "Date of this request.")
+            render_field_intro(3, "Request date", "Please select the date of this request")
             request_date = st.date_input(
                 "Request date", value=date.today(), label_visibility="collapsed"
             )
         with col_d:
-            render_field_intro(4, "Business justification", "Why is this data needed?")
+            render_field_intro(4, "Business justification", "Please describe why this data source is needed")
             business_justification = st.text_input(
                 "Business justification",
                 placeholder="e.g. Required for monthly reporting",
@@ -68,7 +68,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_e, col_f = st.columns(2, gap="large")
         with col_e:
-            render_field_intro(5, "Contains PHI", "Does this data source contain Protected Health Information?")
+            render_field_intro(5, "Contains PHI", "Please select Yes if this data includes Protected Health Information, otherwise No")
             contains_phi = st.selectbox(
                 "Contains PHI",
                 options=YES_NO,
@@ -77,7 +77,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_f:
-            render_field_intro(6, "Delete handling", "How should deleted records be handled?")
+            render_field_intro(6, "Delete handling", "Please select how deleted records from the source should be handled — Hard (physically removed), Soft (flagged but kept), or Ignore (deletes not tracked)")
             delete_handling = st.selectbox(
                 "Delete handling",
                 options=DELETE_HANDLING_OPTIONS,
@@ -89,7 +89,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_g, col_h = st.columns(2, gap="large")
         with col_g:
-            render_field_intro(7, "Schema stability", "How often does the source schema change?")
+            render_field_intro(7, "Schema stability", "Please select how often you expect the structure of this data to change")
             schema_stability = st.selectbox(
                 "Schema stability",
                 options=SCHEMA_STABILITY_OPTIONS,
@@ -98,7 +98,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_h:
-            render_field_intro(8, "CDC method", "How are changes captured in the source?")
+            render_field_intro(8, "CDC method", "Please select how changes will be tracked for this source — Timestamp, Log Based, or Not Applicable if this is a full reload each time")
             cdc_method = st.selectbox(
                 "CDC method",
                 options=CDC_METHOD_OPTIONS,
@@ -111,14 +111,14 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_i, col_j = st.columns(2, gap="large")
         with col_i:
-            render_field_intro(9, "Pipeline name", "What is the name of this pipeline or data source?")
+            render_field_intro(9, "Pipeline name", "Please fill a name to identify this new pipeline")
             pipeline_name = st.text_input(
                 "Pipeline name",
                 placeholder="e.g. Claims Feed — Vendor ABC",
                 label_visibility="collapsed",
             )
         with col_j:
-            render_field_intro(10, "Data volume (GB)", "How much data is expected per load?")
+            render_field_intro(10, "Data volume (GB)", "Please fill the expected size of this data source in GB")
             source_gb = st.number_input(
                 "Data volume (GB)",
                 min_value=0.01,
@@ -131,7 +131,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_k, col_l = st.columns(2, gap="large")
         with col_k:
-            render_field_intro(11, "SLA (hours)", "Required delivery time from source arrival.")
+            render_field_intro(11, "SLA (hours)", "Please fill how many hours this data needs to be ready within, after each run starts")
             sla_time_hr = st.number_input(
                 "SLA (hours)",
                 min_value=0.5,
@@ -141,7 +141,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_l:
-            render_field_intro(12, "Network source type", "How is the source system connected to Azure?")
+            render_field_intro(12, "Network source type", "Please select how this data connects to Azure")
             network_source_type = st.selectbox(
                 "Network source type",
                 options=NETWORK_SOURCE_TYPES,
@@ -154,7 +154,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_m, col_n = st.columns(2, gap="large")
         with col_m:
-            render_field_intro(13, "Copy interval", "Will data be loaded in bulk or incrementally?")
+            render_field_intro(13, "Copy interval", "Please select whether this is a full reload each time (Bulk) or only changed records (Incremental)")
             copy_interval = st.selectbox(
                 "Copy interval",
                 options=COPY_INTERVALS,
@@ -163,7 +163,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_n:
-            render_field_intro(14, "VM type", "What VM size will the cluster use?")
+            render_field_intro(14, "VM type", "Please select the virtual machine type this pipeline should run on")
             vm_type = st.selectbox(
                 "VM type",
                 options=VM_TYPES,
@@ -175,7 +175,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_o, col_p = st.columns(2, gap="large")
         with col_o:
-            render_field_intro(15, "Egress", "Will data cross network boundaries (egress charges apply)?")
+            render_field_intro(15, "Egress", "Please select Yes if this data will be sent to a destination outside Azure, otherwise No")
             include_egress_raw = st.selectbox(
                 "Egress",
                 options=YES_NO,
@@ -184,7 +184,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_p:
-            render_field_intro(16, "Egress volume (GB)", "How much data will be egressed per load? Leave 0 if not applicable.")
+            render_field_intro(16, "Egress volume (GB)", "Please fill how much data, in GB, will be sent outside Azure (only if the above is Yes)")
             egress_gb = st.number_input(
                 "Egress volume (GB)",
                 min_value=0.0,
@@ -196,7 +196,7 @@ def render_new_ingestion_page() -> None:
 
         # ── Section 4: Data characteristics ──────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(17, "Data distribution", "Is the data expected to be evenly spread, or could a small number of records make up most of the volume?")
+        render_field_intro(17, "Data distribution", "Please select whether most of this data is spread evenly, or comes mostly from a small number of records, customers, or categories")
         data_distribution = st.selectbox(
             "Data distribution",
             options=DATA_DISTRIBUTIONS,
@@ -206,7 +206,7 @@ def render_new_ingestion_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(18, "Delivery pattern", "How will this data typically be delivered each time?")
+        render_field_intro(18, "Delivery pattern", "Please select whether this data typically arrives as one large file, or as many small files or frequent small batches")
         delivery_pattern = st.selectbox(
             "Delivery pattern",
             options=DELIVERY_PATTERNS,
@@ -216,7 +216,7 @@ def render_new_ingestion_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(19, "Partition key", "Does the data have a natural field to split it by (e.g. date, region, account)?")
+        render_field_intro(19, "Partition key", "Please select whether this data has a clear field like date, region, or account that can be used to split it into smaller groups")
         partition_key_availability = st.selectbox(
             "Partition key",
             options=PARTITION_KEY_AVAILABILITIES,
@@ -229,7 +229,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_t, col_u, col_v = st.columns(3, gap="large")
         with col_t:
-            render_field_intro(20, "Source complexity", "What type of source system is this?")
+            render_field_intro(20, "Source complexity", "Please select the type of system this data is coming from")
             complexity_source_type = st.selectbox(
                 "Source complexity",
                 options=COMPLEXITY_SOURCE_TYPES,
@@ -238,7 +238,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_u:
-            render_field_intro(21, "Transformation logic", "What level of transformation is required?")
+            render_field_intro(21, "Transformation logic", "Please select how much transformation or business logic needs to be applied to this data — light, medium, or heavy")
             transformation_logic = st.selectbox(
                 "Transformation logic",
                 options=TRANSFORMATION_LOGICS,
@@ -247,7 +247,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_v:
-            render_field_intro(22, "Frequency", "How often will data be ingested?")
+            render_field_intro(22, "Frequency", "Please select how often this data needs to be refreshed")
             frequency = st.selectbox(
                 "Frequency",
                 options=NEW_SOURCE_FREQUENCIES,
