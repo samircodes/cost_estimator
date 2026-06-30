@@ -18,10 +18,10 @@ def _fmt(val) -> str:
 
 
 _TILE_STYLES = {
-    "compute": ("eff6ff", "bfdbfe", "1e40af"),   # sky blue
-    "storage": ("fdf4ff", "e9d5ff", "7e22ce"),   # lavender
-    "network": ("f0fdf4", "bbf7d0", "166534"),   # mint green
-    "total":   ("eef2ff", "c7d2fe", "3730a3"),   # indigo
+    "compute": ("eff6ff", "bfdbfe", "1e40af"),
+    "storage": ("fdf4ff", "e9d5ff", "7e22ce"),
+    "network": ("f0fdf4", "bbf7d0", "166534"),
+    "total":   ("eef2ff", "c7d2fe", "3730a3"),
 }
 
 
@@ -64,13 +64,6 @@ def _effort_badge(level: str) -> str:
     )
 
 
-def _sep() -> None:
-    st.markdown(
-        "<hr style='margin:10px 0;border:none;border-top:1px solid #e5e7eb'>",
-        unsafe_allow_html=True,
-    )
-
-
 def _render_existing_details(detail: dict) -> None:
     st.markdown("##### Source Details")
     c1, c2, c3 = st.columns(3)
@@ -100,7 +93,7 @@ def _render_new_source_details(detail: dict) -> None:
     st.markdown("##### Connection")
     c1, c2, c3 = st.columns(3)
     c1.markdown(f"**Network Source Type**  \n{detail.get('network_source_type') or '—'}")
-    c2.markdown(f"**Copy Interval**  \n{detail.get('copy_interval') or '—'}")
+    c2.markdown(f"**Load Type**  \n{detail.get('copy_interval') or '—'}")
     c3.markdown(f"**VM Type**  \n{detail.get('vm_type') or '—'}")
 
     egress_val = "Yes" if str(detail.get("include_egress", "")).lower() == "true" else "No"
@@ -171,65 +164,78 @@ def render_request_history_page() -> None:
         )
 
     sorted_rows = rows if sort_order == "Newest first" else list(reversed(rows))
-
     st.markdown("")
 
     # ── Request cards ─────────────────────────────────────────────────────────
     for row in sorted_rows:
+        ingestion_type = row["ingestion_type"] or "—"
+        is_new  = ingestion_type.lower().startswith("new")
+        accent  = "1e40af" if is_new else "065f46"
+
+        detail       = detail_map.get(row["request_id"])
+        effort_level = (detail or {}).get("effort_complexity_level")
+        effort_est   = (detail or {}).get("effort_total_days_estimate")
+        effort_min   = (detail or {}).get("effort_total_days_min")
+        effort_max   = (detail or {}).get("effort_total_days_max")
+
+        # Header HTML
+        header_html = (
+            f"<div style='display:flex;justify-content:space-between;"
+            f"align-items:flex-start;margin-bottom:14px'>"
+            f"  <div style='display:flex;align-items:center;gap:10px;flex-wrap:wrap'>"
+            f"    {_type_badge(ingestion_type)}"
+            f"    <span style='font-size:0.92rem;color:#111827'>"
+            f"      <strong>{row['requestor'] or '—'}</strong>"
+            f"      <span style='color:#d1d5db'> · </span>"
+            f"      <span style='color:#6b7280'>{row['business_unit'] or '—'}</span>"
+            f"    </span>"
+            f"  </div>"
+            f"  <span style='font-size:0.83rem;color:#9ca3af;white-space:nowrap;"
+            f"  padding-top:2px'>{row['request_date'] or '—'}</span>"
+            f"</div>"
+        )
+
+        sep = "<hr style='margin:12px 0;border:none;border-top:1px solid #e5e7eb'>"
+
+        cost_html = (
+            f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>"
+            f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),       _fmt(row['compute_cost_high']),       'compute')}"
+            f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),       _fmt(row['storage_cost_high']),       'storage')}"
+            f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),    _fmt(row['networking_cost_high']),    'network')}"
+            f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']), _fmt(row['total_cost_monthly_high']), 'total')}"
+            f"</div>"
+        )
+
+        effort_html = ""
+        if effort_level and effort_est is not None:
+            effort_html = (
+                f"{sep}"
+                f"<p style='margin:0;font-size:0.85rem;color:#374151'>"
+                f"<span style='font-weight:600;margin-right:10px'>Effort</span>"
+                f"{_effort_badge(effort_level)}"
+                f"&nbsp;&nbsp;"
+                f"<span>{effort_est} days estimated</span>"
+                f"&nbsp;&nbsp;"
+                f"<span style='color:#9ca3af'>({effort_min} – {effort_max} day range)</span>"
+                f"</p>"
+            )
+
         with st.container(border=True):
-
-            # Header
-            h1, h2, h3 = st.columns([2, 3, 2])
-            h1.markdown(_type_badge(row["ingestion_type"]), unsafe_allow_html=True)
-            h2.markdown(
-                f"<p style='margin:2px 0 0;font-size:0.92rem;line-height:1.5'>"
-                f"<strong style='color:#111827'>{row['requestor'] or '—'}</strong>"
-                f"<span style='color:#e5e7eb'> · </span>"
-                f"<span style='color:#6b7280'>{row['business_unit'] or '—'}</span>"
-                f"</p>",
-                unsafe_allow_html=True,
-            )
-            h3.markdown(
-                f"<p style='margin:2px 0 0;font-size:0.83rem;color:#9ca3af;"
-                f"text-align:right;line-height:1.5'>{row['request_date'] or '—'}</p>",
-                unsafe_allow_html=True,
-            )
-
-            _sep()
-
-            # Cost ranges — coloured tiles in a CSS grid
+            # Left accent bar + card body side by side
             st.markdown(
-                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:2px 0'>"
-                f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),       _fmt(row['compute_cost_high']),       'compute')}"
-                f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),       _fmt(row['storage_cost_high']),       'storage')}"
-                f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),    _fmt(row['networking_cost_high']),    'network')}"
-                f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']), _fmt(row['total_cost_monthly_high']), 'total')}"
+                f"<div style='display:flex;gap:16px;align-items:stretch'>"
+                f"  <div style='width:5px;min-height:90px;background:#{accent};"
+                f"  border-radius:4px;flex-shrink:0'></div>"
+                f"  <div style='flex:1;min-width:0'>"
+                f"    {header_html}"
+                f"    {sep}"
+                f"    {cost_html}"
+                f"    {effort_html}"
+                f"  </div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
 
-            # Effort row
-            detail = detail_map.get(row["request_id"])
-            effort_level = (detail or {}).get("effort_complexity_level")
-            effort_est   = (detail or {}).get("effort_total_days_estimate")
-            effort_min   = (detail or {}).get("effort_total_days_min")
-            effort_max   = (detail or {}).get("effort_total_days_max")
-
-            if effort_level and effort_est is not None:
-                _sep()
-                st.markdown(
-                    f"<p style='margin:0;font-size:0.85rem;color:#374151'>"
-                    f"<span style='font-weight:600;margin-right:10px'>Effort</span>"
-                    f"{_effort_badge(effort_level)}"
-                    f"&nbsp;&nbsp;"
-                    f"<span style='color:#374151'>{effort_est} days estimated</span>"
-                    f"&nbsp;&nbsp;"
-                    f"<span style='color:#9ca3af'>({effort_min} – {effort_max} day range)</span>"
-                    f"</p>",
-                    unsafe_allow_html=True,
-                )
-
-            # Form detail expander
             with st.expander("View Submitted Form"):
                 if not detail:
                     st.info(
