@@ -189,6 +189,13 @@ def render_existing_source_page() -> None:
             st.error(f"Please fill in: {', '.join(missing)}")
             return
 
+        if load_type == "Bulk" and cdc_method != "Not Applicable":
+            st.error("CDC Method should be 'Not Applicable' when Load Type is Bulk.")
+            return
+        if load_type == "CDC" and cdc_method == "Not Applicable":
+            st.error("CDC Method cannot be 'Not Applicable' when Load Type is CDC.")
+            return
+
         request_id = str(uuid.uuid4())
 
         try:
