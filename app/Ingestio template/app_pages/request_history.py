@@ -17,16 +17,23 @@ def _fmt(val) -> str:
         return "—"
 
 
-def _cost_cell(label: str, low: str, high: str, accent: bool = False) -> str:
-    label_color = "#9ca3af"
-    value_color = "#1e40af" if accent else "#111827"
-    weight      = "800"    if accent else "700"
+_TILE_STYLES = {
+    "compute": ("eff6ff", "bfdbfe", "1e40af"),   # sky blue
+    "storage": ("fdf4ff", "e9d5ff", "7e22ce"),   # lavender
+    "network": ("f0fdf4", "bbf7d0", "166534"),   # mint green
+    "total":   ("eef2ff", "c7d2fe", "3730a3"),   # indigo
+}
+
+
+def _cost_cell(label: str, low: str, high: str, tile: str = "total") -> str:
+    bg, border, fg = _TILE_STYLES.get(tile, _TILE_STYLES["total"])
     return (
-        f"<div style='padding:0 8px'>"
-        f"<p style='margin:0 0 5px;font-size:0.67rem;color:{label_color};font-weight:600;"
-        f"text-transform:uppercase;letter-spacing:0.07em'>{label}</p>"
-        f"<p style='margin:0;font-size:0.93rem;font-weight:{weight};"
-        f"color:{value_color};font-variant-numeric:tabular-nums;white-space:nowrap'>"
+        f"<div style='background:#{bg};border:1px solid #{border};"
+        f"border-radius:10px;padding:14px 16px'>"
+        f"<p style='margin:0 0 6px;font-size:0.67rem;color:#{fg};font-weight:700;"
+        f"text-transform:uppercase;letter-spacing:0.07em;opacity:0.75'>{label}</p>"
+        f"<p style='margin:0;font-size:0.95rem;font-weight:800;"
+        f"color:#{fg};font-variant-numeric:tabular-nums;white-space:nowrap'>"
         f"{low}&thinsp;–&thinsp;{high}</p>"
         f"</div>"
     )
@@ -190,14 +197,13 @@ def render_request_history_page() -> None:
 
             _sep()
 
-            # Cost ranges — shown as a CSS grid for even spacing and no gaps
+            # Cost ranges — coloured tiles in a CSS grid
             st.markdown(
-                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);"
-                f"background:#f8fafc;border-radius:8px;padding:14px 8px;gap:4px'>"
-                f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),      _fmt(row['compute_cost_high']))}"
-                f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),      _fmt(row['storage_cost_high']))}"
-                f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),   _fmt(row['networking_cost_high']))}"
-                f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']),_fmt(row['total_cost_monthly_high']), accent=True)}"
+                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:2px 0'>"
+                f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),       _fmt(row['compute_cost_high']),       'compute')}"
+                f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),       _fmt(row['storage_cost_high']),       'storage')}"
+                f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),    _fmt(row['networking_cost_high']),    'network')}"
+                f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']), _fmt(row['total_cost_monthly_high']), 'total')}"
                 f"</div>",
                 unsafe_allow_html=True,
             )
