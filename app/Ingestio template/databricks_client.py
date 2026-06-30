@@ -87,10 +87,32 @@ def _run_query(client: WorkspaceClient, statement: str) -> list[list]:
     response = client.statement_execution.execute_statement(
         warehouse_id=_get_warehouse_id(client),
         statement=statement,
-        wait_timeout="30s",
+        wait_timeout="50s",
     )
-    if response.status is None or response.status.state != StatementState.SUCCEEDED:
-        return []
+    state = response.status.state if response.status else None
+
+    # If the warehouse was starting up the statement may still be running —
+    # poll until it finishes (up to 70 more seconds, 120s total).
+    if state in (StatementState.RUNNING, StatementState.PENDING):
+        statement_id = response.statement_id
+        for _ in range(14):
+            time.sleep(5)
+            response = client.statement_execution.get_statement(
+                statement_id=statement_id
+            )
+            state = response.status.state if response.status else None
+            if state not in (StatementState.RUNNING, StatementState.PENDING):
+                break
+
+    if state != StatementState.SUCCEEDED:
+        error_detail = ""
+        if response.status and response.status.error:
+            error_detail = f" — {response.status.error.message}"
+        raise RuntimeError(
+            f"Query did not succeed (state={state})"
+            f"{error_detail or '. The SQL warehouse may still be starting up — try refreshing.'}"
+        )
+
     if response.result is None or response.result.data_array is None:
         return []
     return response.result.data_array
