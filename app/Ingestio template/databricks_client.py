@@ -20,7 +20,7 @@ def _client() -> WorkspaceClient:
 
 
 def _spark() -> DatabricksSession:
-    return DatabricksSession.builder.getOrCreate()
+    return DatabricksSession.builder.serverless(True).getOrCreate()
 
 
 def _run_query(statement: str) -> list[list]:
