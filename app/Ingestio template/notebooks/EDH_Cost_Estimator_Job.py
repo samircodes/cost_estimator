@@ -658,6 +658,12 @@ print(f"{'=' * 65}")
 # SECTION 13: SAVE RAW REQUEST TO DELTA
 # ============================================================
 
+from pyspark.sql.types import (
+    StructType, StructField,
+    StringType, DoubleType, IntegerType, TimestampType,
+)
+from datetime import datetime, timezone
+
 existingsource_request_schema = StructType([
     StructField("request_id",              StringType(),    True),
     StructField("submission_timestamp",    TimestampType(), True),
@@ -695,12 +701,6 @@ if save_results:
 # ============================================================
 # SECTION 14: SAVE TO DELTA TABLE
 # ============================================================
-
-from pyspark.sql.types import (
-    StructType, StructField,
-    StringType, DoubleType, IntegerType, TimestampType
-)
-from datetime import datetime, timezone
 
 schema = StructType([
     StructField("request_id",             StringType(),    True),
