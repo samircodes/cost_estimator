@@ -21,7 +21,7 @@ dbutils.widgets.dropdown("delete_handling",         "Soft",            ["Hard", 
 dbutils.widgets.dropdown("schema_stability",        "Stable",          ["Stable", "Occasionally Changes", "Highly Dynamic"])
 dbutils.widgets.dropdown("cdc_method",              "Not Applicable",  ["Timestamp", "Log Based", "Not Applicable"])
 
-# ---- New-source cost calculation widgets ----
+# ---- New-source cost calculation widgets (business-answerable inputs only) ----
 dbutils.widgets.text(    "pipeline_name",       "New EDH Pipeline")
 dbutils.widgets.text(    "source_gb",           "300")
 dbutils.widgets.dropdown("network_source_type", "expressroute_metered",
@@ -43,24 +43,15 @@ dbutils.widgets.dropdown("partition_key_availability",
                          "Not sure",
                          ["Yes, a clear date/region/key field", "Somewhat", "No clear splitting field", "Not sure"])
 
-# ---- Effort estimation widgets ----
+# ---- Effort estimation widgets (business/analyst-answerable inputs only) ----
 dbutils.widgets.dropdown("complexity_source_type", "external_api",
                          ["internal_sql", "internal_api", "azure_service", "external_sftp",
                           "external_api", "aws_s3", "aws_rds", "gcp", "saas_connector",
                           "legacy_mainframe", "multi_source"])
-dbutils.widgets.dropdown("volume_tier", "medium",
-                         ["tiny", "small", "medium", "large", "very_large", "massive"])
-dbutils.widgets.dropdown("transformation_logic", "moderate_joins",
-                         ["passthrough", "light_rename_cast", "moderate_joins",
-                          "complex_business_rules", "heavy_ml_enrichment", "real_time_streaming"])
+dbutils.widgets.dropdown("transformation_logic", "medium",
+                         ["light", "medium", "heavy"])
 dbutils.widgets.dropdown("frequency", "daily",
                          ["adhoc", "weekly", "daily", "hourly", "near_real_time", "real_time"])
-dbutils.widgets.dropdown("data_quality_rules", "standard_validation",
-                         ["none", "basic_nulls", "standard_validation", "complex_cross_table",
-                          "regulatory_compliance", "full_reconciliation"])
-dbutils.widgets.dropdown("dependencies", "few_dependencies",
-                         ["standalone", "single_upstream", "few_dependencies", "moderate_dag",
-                          "complex_dag", "cross_team_multi_system"])
 
 dbutils.widgets.dropdown("save_results", "true", ["true", "false"])
 
@@ -90,13 +81,15 @@ PARTITIONING_BY_KEY_AVAILABILITY = {
     "Not sure":                           1.2,
 }
 
+# Collapsed from 6 categories to 3 for business-answerability.
+# Values averaged from original 6-category values:
+#   light = avg(passthrough=1.1, light_rename_cast=1.3)
+#   medium = moderate_joins=1.8 alone (preserves original flat default)
+#   heavy = avg(complex_business_rules=2.3, heavy_ml_enrichment=2.8, real_time_streaming=3.3)
 COMPLEXITY_FACTOR_BY_TRANSFORMATION = {
-    "passthrough":             1.1,
-    "light_rename_cast":       1.3,
-    "moderate_joins":          1.8,
-    "complex_business_rules":  2.3,
-    "heavy_ml_enrichment":     2.8,
-    "real_time_streaming":     3.3,
+    "light":  1.2,
+    "medium": 1.8,
+    "heavy":  2.8,
 }
 
 DBU_COST_HR  = 0.3
@@ -121,7 +114,6 @@ VM_SPECS = {
 # SECTION 3: NETWORK COST
 # ============================================================
 
-import pandas as pd
 import math
 from datetime import datetime, timezone
 
@@ -293,7 +285,6 @@ def calculate_compute_cost_from_sizing(
     sizing: dict,
     vm_cost_hr: float = 1.17,
     dbu_cost_hr: float = DBU_COST_HR,
-    driver_nodes: int = DRIVER_NODES,
 ) -> dict:
     total_nodes          = sizing["total_nodes"]
     total_per_node_hr    = vm_cost_hr + dbu_cost_hr
@@ -314,10 +305,15 @@ def calculate_compute_cost_from_sizing(
 # SECTION 6: EFFORT ESTIMATION ENGINE
 # ============================================================
 
+# Renormalized after removing data_quality_rules and dependencies
+# (each weight / 0.70, since the remaining 4 originally summed to
+# 0.70 - this preserves their original RELATIVE importance to each
+# other rather than picking new round numbers arbitrarily).
 COMPLEXITY_WEIGHTS = {
-    'source_type': 0.20, 'volume': 0.15, 'transformation_logic': 0.25,
-    'frequency': 0.10, 'data_quality_rules': 0.15, 'dependencies': 0.15,
+    'source_type': 0.286, 'volume': 0.214, 'transformation_logic': 0.357,
+    'frequency': 0.143,
 }
+# Weights sum to 1.000
 
 SCORING_RUBRICS = {
     'source_type': {
@@ -331,35 +327,43 @@ SCORING_RUBRICS = {
         'large': 70, 'very_large': 85, 'massive': 95,
     },
     'transformation_logic': {
-        'passthrough': 10, 'light_rename_cast': 25, 'moderate_joins': 50,
-        'complex_business_rules': 70, 'heavy_ml_enrichment': 85, 'real_time_streaming': 95,
+        # Collapsed from 6 to 3: light=avg(10,25); medium=50; heavy=avg(70,85,95)
+        'light':  18,
+        'medium': 50,
+        'heavy':  83,
     },
     'frequency': {
         'adhoc': 10, 'weekly': 20, 'daily': 35,
         'hourly': 60, 'near_real_time': 80, 'real_time': 95,
     },
-    'data_quality_rules': {
-        'none': 5, 'basic_nulls': 20, 'standard_validation': 40,
-        'complex_cross_table': 65, 'regulatory_compliance': 85, 'full_reconciliation': 95,
-    },
-    'dependencies': {
-        'standalone': 10, 'single_upstream': 25, 'few_dependencies': 40,
-        'moderate_dag': 60, 'complex_dag': 80, 'cross_team_multi_system': 95,
-    },
 }
+
+# volume_tier is now DERIVED from source_gb instead of being a separate
+# question. These GB thresholds are invented round-number buckets.
+VOLUME_TIER_THRESHOLDS_GB = [
+    (10,   'tiny'),
+    (50,   'small'),
+    (200,  'medium'),
+    (500,  'large'),
+    (2000, 'very_large'),
+]
+VOLUME_TIER_DEFAULT_ABOVE = 'massive'
+
+def get_volume_tier(source_gb: float) -> str:
+    for threshold_gb, tier in VOLUME_TIER_THRESHOLDS_GB:
+        if source_gb < threshold_gb:
+            return tier
+    return VOLUME_TIER_DEFAULT_ABOVE
 
 def calculate_complexity_score(
     source_type: str = 'external_api', volume: str = 'medium',
-    transformation_logic: str = 'moderate_joins', frequency: str = 'daily',
-    data_quality_rules: str = 'standard_validation', dependencies: str = 'few_dependencies',
+    transformation_logic: str = 'medium', frequency: str = 'daily',
 ) -> dict:
     scores = {
         'source_type':          SCORING_RUBRICS['source_type'].get(source_type, 50),
         'volume':               SCORING_RUBRICS['volume'].get(volume, 50),
         'transformation_logic': SCORING_RUBRICS['transformation_logic'].get(transformation_logic, 50),
         'frequency':            SCORING_RUBRICS['frequency'].get(frequency, 50),
-        'data_quality_rules':   SCORING_RUBRICS['data_quality_rules'].get(data_quality_rules, 50),
-        'dependencies':         SCORING_RUBRICS['dependencies'].get(dependencies, 50),
     }
     weighted_scores = {k: v * COMPLEXITY_WEIGHTS[k] for k, v in scores.items()}
     total_score     = sum(weighted_scores.values())
@@ -391,13 +395,12 @@ TESTING_PERCENTAGE = 0.25
 
 def estimate_effort(
     pipeline_name: str = 'New Pipeline', source_type: str = 'external_api', volume: str = 'medium',
-    transformation_logic: str = 'moderate_joins', frequency: str = 'daily',
-    data_quality_rules: str = 'standard_validation', dependencies: str = 'few_dependencies',
+    transformation_logic: str = 'medium', frequency: str = 'daily',
     complexity_override: str = None,
 ) -> dict:
     complexity = calculate_complexity_score(
         source_type=source_type, volume=volume, transformation_logic=transformation_logic,
-        frequency=frequency, data_quality_rules=data_quality_rules, dependencies=dependencies,
+        frequency=frequency,
     )
     level = complexity_override if complexity_override in ['Simple', 'Medium', 'Complex'] else complexity['complexity_level']
 
@@ -438,8 +441,8 @@ def estimate_effort(
 def validate_inputs(source_gb, copy_interval, network_source_type,
                     sla_time_hr, contains_phi, delete_handling,
                     schema_stability, cdc_method, complexity_source_type,
-                    volume_tier, transformation_logic, frequency,
-                    data_quality_rules, dependencies, vm_type,
+                    transformation_logic, frequency,
+                    vm_type,
                     data_distribution, delivery_pattern,
                     partition_key_availability):
 
@@ -460,7 +463,7 @@ def validate_inputs(source_gb, copy_interval, network_source_type,
     if contains_phi not in ["Yes", "No"]:
         raise ValueError("contains_phi must be Yes or No")
     if delete_handling not in ["Hard", "Soft", "Ignore"]:
-        raise ValueError("Invalid delete handling.")
+        raise ValueError("Invalid delete handling. Choose from: Hard / Soft / Ignore")
     if schema_stability not in ["Stable", "Occasionally Changes", "Highly Dynamic"]:
         raise ValueError("Invalid schema stability.")
     if cdc_method not in ["Timestamp", "Log Based", "Not Applicable"]:
@@ -470,22 +473,16 @@ def validate_inputs(source_gb, copy_interval, network_source_type,
     if copy_interval == "bulk" and cdc_method != "Not Applicable":
         raise ValueError("CDC Method should be 'Not Applicable' when Copy Interval is 'bulk'")
     if complexity_source_type not in SCORING_RUBRICS['source_type']:
-        raise ValueError(f"Invalid complexity_source_type.")
-    if volume_tier not in SCORING_RUBRICS['volume']:
-        raise ValueError(f"Invalid volume_tier.")
+        raise ValueError(f"Invalid complexity_source_type. Choose from: {list(SCORING_RUBRICS['source_type'].keys())}")
     if transformation_logic not in SCORING_RUBRICS['transformation_logic']:
-        raise ValueError(f"Invalid transformation_logic.")
+        raise ValueError(f"Invalid transformation_logic. Choose from: {list(SCORING_RUBRICS['transformation_logic'].keys())}")
     if transformation_logic not in COMPLEXITY_FACTOR_BY_TRANSFORMATION:
         raise ValueError(
             f"transformation_logic '{transformation_logic}' has no matching "
             f"COMPLEXITY_FACTOR_BY_TRANSFORMATION entry - lookup tables are out of sync."
         )
     if frequency not in SCORING_RUBRICS['frequency']:
-        raise ValueError(f"Invalid frequency.")
-    if data_quality_rules not in SCORING_RUBRICS['data_quality_rules']:
-        raise ValueError(f"Invalid data_quality_rules.")
-    if dependencies not in SCORING_RUBRICS['dependencies']:
-        raise ValueError(f"Invalid dependencies.")
+        raise ValueError(f"Invalid frequency. Choose from: {list(SCORING_RUBRICS['frequency'].keys())}")
 
 # COMMAND ----------
 
@@ -516,20 +513,18 @@ delivery_pattern           = dbutils.widgets.get("delivery_pattern")
 partition_key_availability = dbutils.widgets.get("partition_key_availability")
 
 complexity_source_type = dbutils.widgets.get("complexity_source_type")
-volume_tier            = dbutils.widgets.get("volume_tier")
 transformation_logic   = dbutils.widgets.get("transformation_logic")
 frequency              = dbutils.widgets.get("frequency")
-data_quality_rules     = dbutils.widgets.get("data_quality_rules")
-dependencies           = dbutils.widgets.get("dependencies")
 
 save_results = dbutils.widgets.get("save_results").lower() == "true"
 
 validate_inputs(source_gb, copy_interval, network_source_type,
                 sla_time_hr, contains_phi, delete_handling,
                 schema_stability, cdc_method, complexity_source_type,
-                volume_tier, transformation_logic, frequency,
-                data_quality_rules, dependencies, vm_type,
-                data_distribution, delivery_pattern, partition_key_availability)
+                transformation_logic, frequency,
+                vm_type,
+                data_distribution, delivery_pattern,
+                partition_key_availability)
 
 # COMMAND ----------
 
@@ -568,10 +563,11 @@ total_monthly_cost  = round(network["total_monthly_cost"] + storage["grand_total
 total_annual_cost   = round(total_monthly_cost * 12, 2)
 cost_per_gb_monthly = round(total_monthly_cost / source_gb, 4) if source_gb > 0 else 0
 
+derived_volume_tier = get_volume_tier(source_gb)
+
 effort = estimate_effort(
-    pipeline_name=pipeline_name, source_type=complexity_source_type, volume=volume_tier,
+    pipeline_name=pipeline_name, source_type=complexity_source_type, volume=derived_volume_tier,
     transformation_logic=transformation_logic, frequency=frequency,
-    data_quality_rules=data_quality_rules, dependencies=dependencies,
 )
 
 # COMMAND ----------
@@ -610,6 +606,7 @@ print(f"\n{'-' * 70}")
 print(f"  EFFORT ESTIMATE")
 print(f"{'-' * 70}")
 print(f"  Complexity        : {effort['complexity_level']} (score {effort['complexity']['total_score']}/100)")
+print(f"  Volume Tier       : {derived_volume_tier}  (derived from source_gb={source_gb})")
 print(f"  Total Effort      : {effort['total_effort_days']['estimate']} person-days "
       f"({effort['total_effort_days']['min']}-{effort['total_effort_days']['max']} range)")
 print("=" * 70)
@@ -647,11 +644,8 @@ request_schema = StructType([
     StructField("delivery_pattern",            StringType(),    True),
     StructField("partition_key_availability",  StringType(),    True),
     StructField("complexity_source_type",      StringType(),    True),
-    StructField("volume_tier",                 StringType(),    True),
     StructField("transformation_logic",        StringType(),    True),
     StructField("frequency",                   StringType(),    True),
-    StructField("data_quality_rules",          StringType(),    True),
-    StructField("dependencies",                StringType(),    True),
 ])
 
 request_row = [(
@@ -661,8 +655,7 @@ request_row = [(
     pipeline_name, float(source_gb), network_source_type,
     copy_interval, bool(include_egress), float(egress_gb), float(sla_time_hr), vm_type,
     data_distribution, delivery_pattern, partition_key_availability,
-    complexity_source_type, volume_tier, transformation_logic, frequency,
-    data_quality_rules, dependencies,
+    complexity_source_type, transformation_logic, frequency,
 )]
 
 if save_results:
@@ -703,6 +696,7 @@ result_schema = StructType([
     StructField("meets_sla",                       BooleanType(),   True),
     StructField("complexity_score",                DoubleType(),    True),
     StructField("complexity_level",                StringType(),    True),
+    StructField("derived_volume_tier",             StringType(),    True),
     StructField("discovery_days",                  DoubleType(),    True),
     StructField("design_days",                     DoubleType(),    True),
     StructField("build_ingestion_days",            DoubleType(),    True),
@@ -736,6 +730,7 @@ result_row = [(
     bool(sizing["meets_sla"]),
     float(effort["complexity"]["total_score"]),
     effort["complexity_level"],
+    derived_volume_tier,
     float(p["discovery"]["estimate"]),
     float(p["design"]["estimate"]),
     float(p["build_ingestion"]["estimate"]),
@@ -772,8 +767,6 @@ combined_storage_low,    combined_storage_high    = apply_variance(storage["gran
 combined_networking_low, combined_networking_high = apply_variance(network["total_monthly_cost"])
 combined_total_low,      combined_total_high      = apply_variance(total_monthly_cost)
 combined_annual_low,     combined_annual_high     = apply_variance(total_annual_cost)
-
-from pyspark.sql.types import TimestampType as _TS  # already imported above; re-reference to avoid re-import noise
 
 combined_schema = StructType([
     StructField("request_id",              StringType(),    True),

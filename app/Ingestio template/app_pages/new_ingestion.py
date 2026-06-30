@@ -8,9 +8,7 @@ from app_config import (
     COMPLEXITY_SOURCE_TYPES,
     COPY_INTERVALS,
     DATA_DISTRIBUTIONS,
-    DATA_QUALITY_RULES_OPTIONS,
     DELETE_HANDLING_OPTIONS,
-    DEPENDENCIES_OPTIONS,
     DELIVERY_PATTERNS,
     NETWORK_SOURCE_TYPES,
     NEW_SOURCE_FREQUENCIES,
@@ -18,7 +16,6 @@ from app_config import (
     SCHEMA_STABILITY_OPTIONS,
     TRANSFORMATION_LOGICS,
     VM_TYPES,
-    VOLUME_TIERS,
 )
 from databricks_client import trigger_estimator_job
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
@@ -35,7 +32,7 @@ def render_new_ingestion_page() -> None:
         "Provide the details needed to register and onboard a new data source into EDH.",
     )
 
-    render_form_heading("New Source Details", 25)
+    render_form_heading("New Source Details", 22)
 
     with st.form("new_ingestion_request"):
 
@@ -241,16 +238,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_u:
-            render_field_intro(21, "Volume tier", "What is the expected volume category?")
-            volume_tier = st.selectbox(
-                "Volume tier",
-                options=VOLUME_TIERS,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
-        with col_v:
-            render_field_intro(22, "Transformation logic", "What level of transformation is required?")
+            render_field_intro(21, "Transformation logic", "What level of transformation is required?")
             transformation_logic = st.selectbox(
                 "Transformation logic",
                 options=TRANSFORMATION_LOGICS,
@@ -258,11 +246,8 @@ def render_new_ingestion_page() -> None:
                 placeholder="Select",
                 label_visibility="collapsed",
             )
-
-        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_w, col_x = st.columns(2, gap="large")
-        with col_w:
-            render_field_intro(23, "Frequency", "How often will data be ingested?")
+        with col_v:
+            render_field_intro(22, "Frequency", "How often will data be ingested?")
             frequency = st.selectbox(
                 "Frequency",
                 options=NEW_SOURCE_FREQUENCIES,
@@ -270,25 +255,6 @@ def render_new_ingestion_page() -> None:
                 placeholder="Select",
                 label_visibility="collapsed",
             )
-        with col_x:
-            render_field_intro(24, "Data quality rules", "What level of data quality validation is required?")
-            data_quality_rules = st.selectbox(
-                "Data quality rules",
-                options=DATA_QUALITY_RULES_OPTIONS,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
-
-        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(25, "Dependencies", "How many upstream dependencies does this pipeline have?")
-        dependencies = st.selectbox(
-            "Dependencies",
-            options=DEPENDENCIES_OPTIONS,
-            index=None,
-            placeholder="Select",
-            label_visibility="collapsed",
-        )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         submitted = st.form_submit_button(
@@ -312,11 +278,8 @@ def render_new_ingestion_page() -> None:
                 ("Delivery pattern", delivery_pattern),
                 ("Partition key", partition_key_availability),
                 ("Source complexity", complexity_source_type),
-                ("Volume tier", volume_tier),
                 ("Transformation logic", transformation_logic),
                 ("Frequency", frequency),
-                ("Data quality rules", data_quality_rules),
-                ("Dependencies", dependencies),
             ] if not val
         ]
         if missing:
@@ -358,11 +321,8 @@ def render_new_ingestion_page() -> None:
                     "delivery_pattern":            delivery_pattern,
                     "partition_key_availability":  partition_key_availability,
                     "complexity_source_type":      complexity_source_type,
-                    "volume_tier":                 volume_tier,
                     "transformation_logic":        transformation_logic,
                     "frequency":                   frequency,
-                    "data_quality_rules":          data_quality_rules,
-                    "dependencies":                dependencies,
                     "save_results":                "true",
                 },
             )

@@ -31,20 +31,48 @@ dbutils.widgets.dropdown("save_results",        "true",          ["true", "false
 # SECTION 1: LOOKUP TABLES
 # ============================================================
 
+# ----------------------------
+# Observed cluster-level throughput (GB/hr)
+# Source: EDH-PIPELINE-DAILY actuals, 2026-06-26
+# estimated_uncompressed_gb_per_hour from calibration query
+# These are the TOTAL cluster rates (not per-worker) observed
+# during each task's window. runtime = additional_gb / throughput.
+#
+# Postgres not directly measured — set equal to SQL Server Bulk.
+# SFTP is the avg of two concurrent tasks (Integration Template
+# 1.743 GB/hr and Workday 0.626 GB/hr) that shared the cluster.
+# ----------------------------
 THROUGHPUT_GB_HR = {
-    "SQL Server": 21.45,
-    "Postgres":   1.83,
-    "Sybase":     5.10,
-    "S3":         28.38,
-    "SFTP":       0.95
+    "SQL Server": 10.79,
+    "Postgres":   10.79,
+    "S3":         27.84,
+    "SFTP":        1.19,
+    "Sybase":      3.09,
 }
 
+# ----------------------------
+# Observed typical worker count during each source's task window
+# Source: system.compute.node_timeline, 2026-06-26
+# Used for DBU rate and VM node-count calculation ONLY — not for
+# runtime (runtime comes from THROUGHPUT_GB_HR directly).
+# Sybase is single-node fixed — no workers, driver only.
+# ----------------------------
+TYPICAL_WORKERS = {
+    "SQL Server": 1.8,
+    "Postgres":   1.8,
+    "S3":         2.9,
+    "SFTP":       1.5,
+}
+VM_RATE_PER_NODE = 1.808   # Standard_D32ds_v5 on-demand $/hr
+                            # Applies to both L-1-5 and L-SYBASE clusters
+                            # Source: Vantage tracker — confirm against your actual Azure bill
+
 CLUSTER_CONFIG = {
-    "SQL Server": {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4, "max_workers": 5, "vm_rate": 1.808},
-    "Postgres":   {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4, "max_workers": 5, "vm_rate": 1.808},
-    "S3":         {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4, "max_workers": 5, "vm_rate": 1.808},
-    "SFTP":       {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4, "max_workers": 5, "vm_rate": 1.808},
-    "Sybase":     {"type": "single", "dbu_fixed": 8,                                            "vm_rate": 1.808}
+    "SQL Server": {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4},
+    "Postgres":   {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4},
+    "S3":         {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4},
+    "SFTP":       {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4},
+    "Sybase":     {"type": "single", "dbu_fixed":   8},
 }
 
 LAYER_CONFIG = {
@@ -63,6 +91,9 @@ COMPRESSION_RATIO_BY_FORMAT = {
     "JDBC Tabular": 0.30
 }
 
+# Note: Any data format can be paired with any source type.
+# Compression ratio is driven purely by DATA_FORMAT, not source.
+
 TRANSFORMATION_PROPORTIONS = {
     "Silver":  40 / 238,
     "Gold":    34 / 238,
@@ -70,7 +101,7 @@ TRANSFORMATION_PROPORTIONS = {
     "RT_Mart": 16 / 238
 }
 
-CDC_RUNTIME_FACTOR = 0.30
+CDC_RUNTIME_FACTOR = 0.10   # CDC processes ~10% of data vs Bulk per run
 
 FREQUENCY_MAP = {
     "Daily":   30,
@@ -101,78 +132,86 @@ NETWORK_MULTIPLIER = {
 # COMMAND ----------
 
 # ============================================================
-# SECTION 2: WORKER TIER LOGIC
+# SECTION 2: COMPUTE COST CALCULATION
+# (Worker partition-formula machinery fully retired —
+#  MB_PER_PARTITION, WAVES_PER_CORE, CORES_PER_NODE,
+#  get_worker_count(), get_effective_dbu_hr(),
+#  get_transformation_dbu_hr() all removed.
+#  TYPICAL_WORKERS and THROUGHPUT_GB_HR from real actuals
+#  replace everything that was estimated.)
 # ============================================================
 
 import math
 
-MB_PER_PARTITION = 128
-CORES_PER_NODE   = 32
-WAVES_PER_CORE   = 4
-
-def get_worker_count(additional_gb):
-    partitions     = (additional_gb * 1024) / MB_PER_PARTITION
-    cores_needed   = partitions / WAVES_PER_CORE
-    workers_needed = math.ceil(cores_needed / CORES_PER_NODE)
-    workers_needed = max(1, workers_needed)
-    workers_needed = min(workers_needed, 5)
-    return workers_needed
-
-def get_effective_dbu_hr(source_type, additional_gb):
-    config = CLUSTER_CONFIG[source_type]
-    if config["type"] == "single":
-        return config["dbu_fixed"]
-    else:
-        workers = get_worker_count(additional_gb)
-        return config["dbu_driver"] + (workers * config["dbu_per_worker"])
-
-def get_transformation_dbu_hr(additional_gb):
-    l1_5_config = CLUSTER_CONFIG["SQL Server"]
-    workers = get_worker_count(additional_gb)
-    return l1_5_config["dbu_driver"] + (workers * l1_5_config["dbu_per_worker"])
-
-# COMMAND ----------
-
-# ============================================================
-# SECTION 3: COMPUTE COST CALCULATION
-# ============================================================
-
 def calculate_compute_cost(source_type, additional_gb, load_type, runs_per_month):
-    throughput         = THROUGHPUT_GB_HR[source_type]
-    ingestion_dbu      = get_effective_dbu_hr(source_type, additional_gb)
-    transformation_dbu = get_transformation_dbu_hr(additional_gb)
-    layers             = LAYER_CONFIG[source_type]["layers"]
-    cfg                = CLUSTER_CONFIG[source_type]
+    """
+    Compute cost uses two observed lookup tables (both from Jun-26 actuals):
 
-    vm_rate = cfg["vm_rate"] * (SPOT_DISCOUNT_FACTOR if USE_SPOT else 1.0)
+      THROUGHPUT_GB_HR  — drives runtime only
+      TYPICAL_WORKERS   — drives DBU rate and VM node count only
 
-    if cfg["type"] == "single":
-        ingestion_nodes = 1
-    else:
-        ingestion_nodes = 1 + get_worker_count(additional_gb)
-    transformation_nodes = 1 + get_worker_count(additional_gb)
+    Formula:
+      runtime_hrs       = additional_gb / THROUGHPUT_GB_HR[source]
+      if CDC: runtime  *= 0.10
 
-    ingestion_runtime_hrs = additional_gb / throughput
+      For multi-node:
+        ingestion_dbu_hr   = 16 + (typical_workers × 6.4)
+        ingestion_nodes    = 1 + typical_workers
+      For Sybase (single-node):
+        ingestion_dbu_hr   = 8 (fixed)
+        ingestion_nodes    = 1
+
+      Transformation (Silver+Gold, always on L-1-5, same workers):
+        same dbu_hr and nodes as multi-node above
+        scaled by stage proportion of total runtime
+
+      ingestion_dbu_cost   = runtime × dbu_hr × $0.30 × runs
+      ingestion_vm_cost    = runtime × nodes  × $1.808 × runs
+      transformation costs = same formula applied to each stage
+    """
+    layers = LAYER_CONFIG[source_type]["layers"]
+    cfg    = CLUSTER_CONFIG[source_type]
+    vm_rate = VM_RATE_PER_NODE * (SPOT_DISCOUNT_FACTOR if USE_SPOT else 1.0)
+
+    # ---- Step 1: Runtime from observed cluster throughput ----
+    ingestion_runtime_hrs = additional_gb / THROUGHPUT_GB_HR[source_type]
     if load_type == "CDC":
         ingestion_runtime_hrs *= CDC_RUNTIME_FACTOR
 
-    ingestion_dbu_cost = ingestion_runtime_hrs * ingestion_dbu * COST_PER_DBU * runs_per_month
-    ingestion_vm_cost  = ingestion_runtime_hrs * ingestion_nodes * vm_rate * runs_per_month
+    # ---- Step 2: DBU rate and node count from observed typical workers ----
+    if cfg["type"] == "single":
+        ingestion_dbu_hr = cfg["dbu_fixed"]       # Sybase: 8 DBU/hr fixed
+        ingestion_nodes  = 1
+    else:
+        workers          = TYPICAL_WORKERS[source_type]
+        ingestion_dbu_hr = cfg["dbu_driver"] + (workers * cfg["dbu_per_worker"])
+        ingestion_nodes  = 1 + workers             # 1 driver + typical workers
+
+    # Transformation always on L-1-5 — use SQL Server's typical workers
+    # (same cluster, same observed worker behavior)
+    l1_5_workers        = TYPICAL_WORKERS["SQL Server"]
+    transformation_dbu_hr = 16 + (l1_5_workers * 6.4)
+    transformation_nodes  = 1 + l1_5_workers
+
+    # ---- Step 3: Ingestion cost (DBU + VM) ----
+    ingestion_dbu_cost = ingestion_runtime_hrs * ingestion_dbu_hr * COST_PER_DBU * runs_per_month
+    ingestion_vm_cost  = ingestion_runtime_hrs * ingestion_nodes  * vm_rate       * runs_per_month
     ingestion_cost     = ingestion_dbu_cost + ingestion_vm_cost
 
+    # ---- Step 4: Transformation cost (DBU + VM, Silver+Gold only) ----
     transformation_dbu_cost = 0
     transformation_vm_cost  = 0
     if "Gold" in layers:
         for stage, proportion in TRANSFORMATION_PROPORTIONS.items():
             if stage in ["Silver", "Gold"]:
-                stage_runtime_hrs = ingestion_runtime_hrs * proportion
-                transformation_dbu_cost += stage_runtime_hrs * transformation_dbu * COST_PER_DBU * runs_per_month
-                transformation_vm_cost  += stage_runtime_hrs * transformation_nodes * vm_rate * runs_per_month
+                stage_runtime         = ingestion_runtime_hrs * proportion
+                transformation_dbu_cost += stage_runtime * transformation_dbu_hr * COST_PER_DBU * runs_per_month
+                transformation_vm_cost  += stage_runtime * transformation_nodes  * vm_rate       * runs_per_month
     transformation_cost = transformation_dbu_cost + transformation_vm_cost
 
     total_dbu_cost = ingestion_dbu_cost + transformation_dbu_cost
-    total_vm_cost  = ingestion_vm_cost + transformation_vm_cost
-    total_compute  = ingestion_cost + transformation_cost
+    total_vm_cost  = ingestion_vm_cost  + transformation_vm_cost
+    total_compute  = ingestion_cost     + transformation_cost
 
     return {
         "ingestion_cost":        round(ingestion_cost, 4),
@@ -181,11 +220,12 @@ def calculate_compute_cost(source_type, additional_gb, load_type, runs_per_month
         "total_dbu_cost":        round(total_dbu_cost, 4),
         "total_vm_cost":         round(total_vm_cost, 4),
         "runtime_hrs":           round(ingestion_runtime_hrs, 4),
-        "ingestion_dbu_hr":      round(ingestion_dbu, 2),
-        "vm_rate_per_node_hr":   round(vm_rate, 4),
+        "throughput_gb_hr":      THROUGHPUT_GB_HR[source_type],
+        "ingestion_dbu_hr":      round(ingestion_dbu_hr, 2),
         "ingestion_nodes":       ingestion_nodes,
-        "transformation_dbu_hr": round(transformation_dbu, 2) if "Gold" in layers else 0.0,
-        "workers":               get_worker_count(additional_gb) if cfg["type"] == "multi" else "N/A (Single Node Ingestion)"
+        "typical_workers":       TYPICAL_WORKERS.get(source_type, "N/A (Single Node)"),
+        "transformation_dbu_hr": round(transformation_dbu_hr, 2) if "Gold" in layers else 0.0,
+        "vm_rate_per_node_hr":   round(vm_rate, 4),
     }
 
 # COMMAND ----------
@@ -237,18 +277,41 @@ def calculate_networking_cost(source_type, data_format, additional_gb, runs_per_
 # ============================================================
 # SECTION 6: EFFORT ESTIMATION
 # ============================================================
+# Lighter version of the new-source effort engine
+# (EDH_New_Source_Estimator_Job.py), adapted for "additional data to an
+# existing source" rather than onboarding from scratch. Same overall
+# methodology (weighted complexity score -> Simple/Medium/Complex bucket
+# -> PHASE_EFFORT day ranges -> testing as % of build), but:
+#
+#   - NO NEW INPUT PARAMETERS. Reuses 5 fields already on this form
+#     (cdc_method, schema_stability, data_format, primary_key_available,
+#     delete_handling) instead of asking new questions, since this
+#     onboarding flow assumes the source connection/cluster already
+#     exists - only the work specific to the NEW DATA being added is
+#     being estimated, not a whole new pipeline build.
+#   - LIGHTER PHASE LIST: Design and Build-Orchestration are dropped
+#     entirely (architecture and orchestration already exist for an
+#     established source), unlike the new-source engine's 7 phases.
+#   - NO num_resources / calendar_duration, for consistency with the
+#     new-source notebook (removed there per explicit request).
+#
+# Same honest caveat as every other constant in this project: these
+# weights, scores, and day-ranges are invented, not calibrated against
+# real historical effort logs. They are internally consistent with each
+# other, not independently verified.
 
 EXISTING_COMPLEXITY_WEIGHTS = {
-    'cdc_method':             0.30,
-    'schema_stability':       0.25,
+    'cdc_method':             0.30,   # biggest driver: CDC/log-based build+validation is the main effort source here
+    'schema_stability':       0.25,   # reused field, previously metadata-only - now actually drives a number
     'data_format':            0.15,
     'primary_key_available':  0.15,
     'delete_handling':        0.15,
 }
+# Weights sum to 1.00
 
 EXISTING_SCORING_RUBRICS = {
     'cdc_method': {
-        'Not Applicable': 15,
+        'Not Applicable': 15,   # Bulk - no CDC logic to build/validate
         'Timestamp':       45,
         'Log Based':       75,
     },
@@ -259,19 +322,19 @@ EXISTING_SCORING_RUBRICS = {
     },
     'data_format': {
         'JDBC Tabular': 15,
-        'Parquet':      15,
+        'Parquet':      15,   # already structured/columnar, minimal parsing effort
         'CSV':          35,
         'XLS':          50,
         'XLSB':         50,
     },
     'primary_key_available': {
-        'Yes': 15,
-        'No':  60,
+        'Yes': 15,   # straightforward merge/incremental logic
+        'No':  60,   # harder merge/incremental/de-dup logic without a PK
     },
     'delete_handling': {
         'Ignore': 15,
         'Soft':   40,
-        'Hard':   65,
+        'Hard':   65,   # physical delete logic + testing is the most effort-intensive option
     },
 }
 
@@ -302,6 +365,10 @@ def calculate_existing_complexity_score(
     }
 
 
+# Lighter phase list - no Design, no Build-Orchestration (infrastructure
+# already exists for an established source). Day ranges deliberately
+# smaller than the new-source PHASE_EFFORT table, since this is scoped
+# to extending/adding to an existing pipeline, not building one.
 EXISTING_PHASE_EFFORT = {
     'discovery':            {'Simple': {'min': 1, 'max': 2}, 'Medium': {'min': 2, 'max': 3}, 'Complex': {'min': 3, 'max': 5}},
     'build_ingestion':      {'Simple': {'min': 1, 'max': 2}, 'Medium': {'min': 2, 'max': 4}, 'Complex': {'min': 4, 'max': 6}},
@@ -310,7 +377,7 @@ EXISTING_PHASE_EFFORT = {
     'documentation':        {'Simple': {'min': 1, 'max': 1}, 'Medium': {'min': 1, 'max': 2}, 'Complex': {'min': 2, 'max': 2}},
 }
 
-EXISTING_TESTING_PERCENTAGE = 0.25
+EXISTING_TESTING_PERCENTAGE = 0.25   # same convention as new-source engine
 
 def estimate_existing_effort(
     cdc_method: str, schema_stability: str, data_format: str,
@@ -350,13 +417,15 @@ def estimate_existing_effort(
     }
 
 
+# ============================================================
+
 def apply_variance(value, variance=VARIANCE_FACTOR):
     return round(value * (1 - variance), 2), round(value * (1 + variance), 2)
 
 # COMMAND ----------
 
 # ============================================================
-# SECTION 7: INPUT VALIDATION
+# SECTION 8: INPUT VALIDATION
 # ============================================================
 
 def validate_inputs(source_type, data_format, additional_gb, load_type,
@@ -395,7 +464,7 @@ def validate_inputs(source_type, data_format, additional_gb, load_type,
 # COMMAND ----------
 
 # ============================================================
-# SECTION 8: MAIN ESTIMATOR FUNCTION
+# SECTION 9: MAIN ESTIMATOR FUNCTION
 # ============================================================
 
 def estimate_cost(
@@ -421,6 +490,11 @@ def estimate_cost(
     )
     total_annual_cost = round(total_monthly_cost * 12, 2)
 
+    # NOTE: +-20% variance removed from this notebook's result table per
+    # explicit request. apply_variance() and VARIANCE_FACTOR are still
+    # defined above (SECTION 7) and used by the new combined result
+    # table (edh_combined_estimations) instead - see SECTION 13.
+
     return {
         "business_unit":          business_unit,
         "request_date":           request_date,
@@ -438,7 +512,8 @@ def estimate_cost(
         "ingestion_frequency":    ingestion_frequency,
         "runs_per_month":         runs_per_month,
         "layers":                 ", ".join(layers),
-        "workers":                str(compute["workers"]),
+        "typical_workers":        compute["typical_workers"],
+        "throughput_gb_hr":       compute["throughput_gb_hr"],
         "ingestion_dbu_hr":       compute["ingestion_dbu_hr"],
         "transformation_dbu_hr":  compute["transformation_dbu_hr"],
         "vm_rate_per_node_hr":    compute["vm_rate_per_node_hr"],
@@ -463,7 +538,7 @@ def estimate_cost(
 # COMMAND ----------
 
 # ============================================================
-# SECTION 9: READ WIDGET INPUTS
+# SECTION 10: READ WIDGET INPUTS
 # ============================================================
 
 request_id             = dbutils.widgets.get("request_id")
@@ -486,7 +561,7 @@ save_results           = dbutils.widgets.get("save_results").lower() == "true"
 # COMMAND ----------
 
 # ============================================================
-# SECTION 10: RUN ESTIMATOR
+# SECTION 11: RUN ESTIMATOR
 # ============================================================
 
 result = estimate_cost(
@@ -507,17 +582,17 @@ result = estimate_cost(
 )
 
 effort = estimate_existing_effort(
-    cdc_method            = cdc_method,
-    schema_stability      = schema_stability,
-    data_format           = data_format,
-    primary_key_available = primary_key_available,
-    delete_handling       = delete_handling,
+    cdc_method             = cdc_method,
+    schema_stability        = schema_stability,
+    data_format             = data_format,
+    primary_key_available   = primary_key_available,
+    delete_handling          = delete_handling,
 )
 
 # COMMAND ----------
 
 # ============================================================
-# SECTION 11: DISPLAY RESULTS
+# SECTION 12: DISPLAY RESULTS
 # ============================================================
 
 print("=" * 65)
@@ -545,7 +620,8 @@ print(f"  Runs Per Month   : {result['runs_per_month']}")
 print(f"  Layers           : {result['layers']}")
 print(f"\n{'-' * 65}")
 print(f"  COMPUTE")
-print(f"  Workers          : {result['workers']}")
+print(f"  Throughput       : {result['throughput_gb_hr']} GB/hr  (Jun-26 observed cluster rate)")
+print(f"  Typical Workers  : {result['typical_workers']}  (Jun-26 avg, drives DBU/VM rate only)")
 print(f"  Ingestion DBU/hr : {result['ingestion_dbu_hr']}")
 print(f"  Transform DBU/hr : {result['transformation_dbu_hr'] if result['transformation_dbu_hr'] > 0 else 'N/A (Bronze only)'}")
 print(f"  VM rate/node/hr  : ${result['vm_rate_per_node_hr']}  ({'Spot' if USE_SPOT else 'On-demand'})")
@@ -579,7 +655,45 @@ print(f"{'=' * 65}")
 # COMMAND ----------
 
 # ============================================================
-# SECTION 12: SAVE TO DELTA TABLE
+# SECTION 13: SAVE RAW REQUEST TO DELTA
+# ============================================================
+
+existingsource_request_schema = StructType([
+    StructField("request_id",              StringType(),    True),
+    StructField("submission_timestamp",    TimestampType(), True),
+    StructField("business_unit",           StringType(),    True),
+    StructField("request_date",            StringType(),    True),
+    StructField("requestor",               StringType(),    True),
+    StructField("business_justification",  StringType(),    True),
+    StructField("primary_key_available",   StringType(),    True),
+    StructField("delete_handling",         StringType(),    True),
+    StructField("schema_stability",        StringType(),    True),
+    StructField("cdc_method",              StringType(),    True),
+    StructField("contains_phi",            StringType(),    True),
+    StructField("source_type",             StringType(),    True),
+    StructField("data_format",             StringType(),    True),
+    StructField("additional_gb",           DoubleType(),    True),
+    StructField("load_type",               StringType(),    True),
+    StructField("ingestion_frequency",     StringType(),    True),
+])
+
+existingsource_request_row = [(
+    request_id, datetime.now(timezone.utc),
+    business_unit, request_date, requestor, business_justification,
+    primary_key_available, delete_handling, schema_stability, cdc_method, contains_phi,
+    source_type, data_format, float(additional_gb), load_type, ingestion_frequency,
+)]
+
+if save_results:
+    df_request = spark.createDataFrame(existingsource_request_row, existingsource_request_schema)
+    df_request.write.format("delta").mode("append").option("mergeSchema", "true") \
+        .saveAsTable("edh.ingestion.edh_existingsource_requests")
+    print(f"Saved request to edh.ingestion.edh_existingsource_requests — request_id={request_id}")
+
+# COMMAND ----------
+
+# ============================================================
+# SECTION 14: SAVE TO DELTA TABLE
 # ============================================================
 
 from pyspark.sql.types import (
@@ -591,6 +705,7 @@ from datetime import datetime, timezone
 schema = StructType([
     StructField("request_id",             StringType(),    True),
     StructField("estimation_timestamp",   TimestampType(), True),
+    # Metadata
     StructField("business_unit",          StringType(),    True),
     StructField("request_date",           StringType(),    True),
     StructField("requestor",              StringType(),    True),
@@ -600,6 +715,7 @@ schema = StructType([
     StructField("schema_stability",       StringType(),    True),
     StructField("cdc_method",             StringType(),    True),
     StructField("contains_phi",           StringType(),    True),
+    # Calculation inputs
     StructField("source_type",            StringType(),    True),
     StructField("data_format",            StringType(),    True),
     StructField("additional_gb",          DoubleType(),    True),
@@ -607,26 +723,32 @@ schema = StructType([
     StructField("ingestion_frequency",    StringType(),    True),
     StructField("runs_per_month",         IntegerType(),   True),
     StructField("layers",                 StringType(),    True),
-    StructField("workers",                StringType(),    True),
+    # Compute
+    StructField("typical_workers",        DoubleType(),    True),
+    StructField("throughput_gb_hr",       DoubleType(),    True),
     StructField("ingestion_dbu_hr",       DoubleType(),    True),
     StructField("transformation_dbu_hr",  DoubleType(),    True),
     StructField("vm_rate_per_node_hr",    DoubleType(),    True),
-    StructField("ingestion_nodes",        IntegerType(),   True),
+    StructField("ingestion_nodes",        DoubleType(),    True),
     StructField("total_dbu_cost",         DoubleType(),    True),
     StructField("total_vm_cost",          DoubleType(),    True),
     StructField("runtime_hrs",            DoubleType(),    True),
     StructField("ingestion_cost",         DoubleType(),    True),
     StructField("transformation_cost",    DoubleType(),    True),
     StructField("compute_cost",           DoubleType(),    True),
+    # Storage
     StructField("compression_ratio",      DoubleType(),    True),
     StructField("compressed_gb",          DoubleType(),    True),
     StructField("data_storage_cost",      DoubleType(),    True),
     StructField("transaction_cost",       DoubleType(),    True),
     StructField("storage_cost",           DoubleType(),    True),
+    # Networking
     StructField("network_multiplier",     DoubleType(),    True),
     StructField("networking_cost",        DoubleType(),    True),
+    # Totals
     StructField("total_monthly_cost",     DoubleType(),    True),
     StructField("total_annual_cost",      DoubleType(),    True),
+    # Effort estimate
     StructField("effort_complexity_score",          DoubleType(), True),
     StructField("effort_complexity_level",          StringType(), True),
     StructField("effort_discovery_days",            DoubleType(), True),
@@ -659,11 +781,12 @@ row = [(
     result["ingestion_frequency"],
     int(result["runs_per_month"]),
     result["layers"],
-    result["workers"],
+    float(result["typical_workers"]) if result["typical_workers"] != "N/A (Single Node)" else 0.0,
+    float(result["throughput_gb_hr"]),
     float(result["ingestion_dbu_hr"]),
     float(result["transformation_dbu_hr"]),
     float(result["vm_rate_per_node_hr"]),
-    int(result["ingestion_nodes"]),
+    float(result["ingestion_nodes"]),
     float(result["total_dbu_cost"]),
     float(result["total_vm_cost"]),
     float(result["runtime_hrs"]),
@@ -706,8 +829,16 @@ else:
 # COMMAND ----------
 
 # ============================================================
-# SECTION 13: SAVE TO COMBINED RESULT TABLE (both ingestion types)
+# SECTION 15: SAVE TO COMBINED RESULT TABLE (both ingestion types)
 # ============================================================
+# Shared dashboard table written by BOTH this notebook and
+# EDH_New_Source_Estimator_Job.py. Schema must stay identical across
+# both notebooks - any change here needs the matching change made in
+# the other notebook's equivalent section too.
+#
+# +-20% variance is applied HERE (not in the per-flow table above,
+# which no longer carries it per explicit request) using the same
+# apply_variance()/VARIANCE_FACTOR already defined in SECTION 7.
 
 combined_compute_low,    combined_compute_high    = apply_variance(result["compute_cost"])
 combined_storage_low,    combined_storage_high    = apply_variance(result["storage_cost"])

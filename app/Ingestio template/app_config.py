@@ -99,14 +99,7 @@ COMPLEXITY_SOURCE_TYPES = (
 
 VOLUME_TIERS = ("tiny", "small", "medium", "large", "very_large", "massive")
 
-TRANSFORMATION_LOGICS = (
-    "passthrough",
-    "light_rename_cast",
-    "moderate_joins",
-    "complex_business_rules",
-    "heavy_ml_enrichment",
-    "real_time_streaming",
-)
+TRANSFORMATION_LOGICS = ("light", "medium", "heavy")
 
 NEW_SOURCE_FREQUENCIES = (
     "adhoc",
