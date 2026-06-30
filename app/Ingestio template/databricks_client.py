@@ -11,6 +11,7 @@ from app_config import (
     COMBINED_ESTIMATIONS_TABLE,
     COST_ESTIMATES_TABLE,
     ESTIMATOR_JOB_ID,
+    NEW_SOURCE_ESTIMATIONS_TABLE,
     NEW_SOURCE_REQUESTS_TABLE,
 )
 
@@ -179,6 +180,15 @@ NEW_SOURCE_DETAIL_COLS = [
 ]
 
 
+NEW_SOURCE_EFFORT_COLS = [
+    "request_id",
+    "complexity_level",
+    "total_effort_days_min",
+    "total_effort_days_estimate",
+    "total_effort_days_max",
+]
+
+
 def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Returns (detail_map, errors). detail_map keyed by request_id; errors is a list of
     human-readable strings for any table that could not be queried."""
@@ -205,6 +215,22 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
             result[d["request_id"]] = d
     except Exception as exc:
         errors.append(f"Could not load new-source form details ({NEW_SOURCE_REQUESTS_TABLE}): {exc}")
+
+    # Merge effort data for new-source requests (stored in a separate table with
+    # different column names — normalise to the same keys used for existing source).
+    try:
+        sel = ", ".join(NEW_SOURCE_EFFORT_COLS)
+        rows = _run_query(client, f"SELECT {sel} FROM {NEW_SOURCE_ESTIMATIONS_TABLE}")
+        for row in rows:
+            d = dict(zip(NEW_SOURCE_EFFORT_COLS, row))
+            rid = d["request_id"]
+            if rid in result:
+                result[rid]["effort_complexity_level"]    = d["complexity_level"]
+                result[rid]["effort_total_days_min"]      = d["total_effort_days_min"]
+                result[rid]["effort_total_days_estimate"] = d["total_effort_days_estimate"]
+                result[rid]["effort_total_days_max"]      = d["total_effort_days_max"]
+    except Exception as exc:
+        errors.append(f"Could not load new-source effort data ({NEW_SOURCE_ESTIMATIONS_TABLE}): {exc}")
 
     return result, errors
 
