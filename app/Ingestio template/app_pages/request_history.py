@@ -17,15 +17,18 @@ def _fmt(val) -> str:
         return "—"
 
 
-def _cost_metric(col, label: str, value: str, low: str, high: str) -> None:
-    col.markdown(
-        f"<div style='padding:4px 0'>"
-        f"<p style='margin:0 0 3px;font-size:0.70rem;color:#6b7280;font-weight:600;"
-        f"text-transform:uppercase;letter-spacing:0.06em'>{label}</p>"
-        f"<p style='margin:0 0 4px;font-size:1.2rem;font-weight:700;color:#111827'>{value}</p>"
-        f"<p style='margin:0;font-size:0.73rem;color:#9ca3af'>{low} – {high}</p>"
-        f"</div>",
-        unsafe_allow_html=True,
+def _cost_cell(label: str, low: str, high: str, accent: bool = False) -> str:
+    label_color = "#9ca3af"
+    value_color = "#1e40af" if accent else "#111827"
+    weight      = "800"    if accent else "700"
+    return (
+        f"<div style='padding:0 8px'>"
+        f"<p style='margin:0 0 5px;font-size:0.67rem;color:{label_color};font-weight:600;"
+        f"text-transform:uppercase;letter-spacing:0.07em'>{label}</p>"
+        f"<p style='margin:0;font-size:0.93rem;font-weight:{weight};"
+        f"color:{value_color};font-variant-numeric:tabular-nums;white-space:nowrap'>"
+        f"{low}&thinsp;–&thinsp;{high}</p>"
+        f"</div>"
     )
 
 
@@ -36,8 +39,8 @@ def _type_badge(ingestion_type: str) -> str:
         bg, fg = "d1fae5", "065f46"
     return (
         f"<span style='background:#{bg};color:#{fg};padding:3px 12px;"
-        f"border-radius:5px;font-size:0.78rem;font-weight:700;white-space:nowrap'>"
-        f"{ingestion_type or '—'}</span>"
+        f"border-radius:5px;font-size:0.76rem;font-weight:700;white-space:nowrap;"
+        f"letter-spacing:0.02em'>{ingestion_type or '—'}</span>"
     )
 
 
@@ -50,11 +53,11 @@ def _effort_badge(level: str) -> str:
     bg, fg = colours.get(level, ("f3f4f6", "374151"))
     return (
         f"<span style='background:#{bg};color:#{fg};padding:2px 10px;"
-        f"border-radius:4px;font-size:0.78rem;font-weight:600'>{level}</span>"
+        f"border-radius:4px;font-size:0.78rem;font-weight:700'>{level}</span>"
     )
 
 
-def _divider() -> None:
+def _sep() -> None:
     st.markdown(
         "<hr style='margin:10px 0;border:none;border-top:1px solid #e5e7eb'>",
         unsafe_allow_html=True,
@@ -146,20 +149,10 @@ def render_request_history_page() -> None:
         )
         return
 
-    # ── Summary metrics ────────────────────────────────────────────────────────
-    total_monthly = sum(float(r["total_cost_monthly"] or 0) for r in rows)
-    total_annual  = sum(float(r["total_cost_annual"]  or 0) for r in rows)
-    s1, s2, s3 = st.columns(3)
-    s1.metric("Total Requests",       len(rows))
-    s2.metric("Total Monthly (est.)", f"${total_monthly:,.2f}")
-    s3.metric("Total Annual (est.)",  f"${total_annual:,.2f}")
-
-    st.markdown("---")
-
     # ── Sort control ───────────────────────────────────────────────────────────
-    left_label, sort_col = st.columns([3, 2])
-    left_label.markdown(
-        f"<p style='margin:6px 0 0;font-size:0.9rem;color:#6b7280'>"
+    count_col, sort_col = st.columns([3, 2])
+    count_col.markdown(
+        f"<p style='margin:6px 0 0;font-size:0.88rem;color:#6b7280'>"
         f"{len(rows)} request{'s' if len(rows) != 1 else ''}</p>",
         unsafe_allow_html=True,
     )
@@ -170,7 +163,6 @@ def render_request_history_page() -> None:
             horizontal=True,
         )
 
-    # DB returns newest-first; reverse for oldest-first
     sorted_rows = rows if sort_order == "Newest first" else list(reversed(rows))
 
     st.markdown("")
@@ -179,50 +171,35 @@ def render_request_history_page() -> None:
     for row in sorted_rows:
         with st.container(border=True):
 
-            # Header: type badge · requestor · business unit · date
+            # Header
             h1, h2, h3 = st.columns([2, 3, 2])
             h1.markdown(_type_badge(row["ingestion_type"]), unsafe_allow_html=True)
             h2.markdown(
-                f"<p style='margin:2px 0 0;font-size:0.92rem;color:#111827;line-height:1.4'>"
-                f"<strong>{row['requestor'] or '—'}</strong>"
-                f"<span style='color:#d1d5db'> · </span>"
+                f"<p style='margin:2px 0 0;font-size:0.92rem;line-height:1.5'>"
+                f"<strong style='color:#111827'>{row['requestor'] or '—'}</strong>"
+                f"<span style='color:#e5e7eb'> · </span>"
                 f"<span style='color:#6b7280'>{row['business_unit'] or '—'}</span>"
                 f"</p>",
                 unsafe_allow_html=True,
             )
             h3.markdown(
-                f"<p style='margin:2px 0 0;font-size:0.85rem;color:#9ca3af;text-align:right'>"
-                f"{row['request_date'] or '—'}</p>",
+                f"<p style='margin:2px 0 0;font-size:0.83rem;color:#9ca3af;"
+                f"text-align:right;line-height:1.5'>{row['request_date'] or '—'}</p>",
                 unsafe_allow_html=True,
             )
 
-            _divider()
+            _sep()
 
-            # Cost breakdown with ±10% ranges
-            c1, c2, c3, c4 = st.columns(4)
-            _cost_metric(
-                c1, "Compute /mo",
-                _fmt(row["compute_cost_monthly"]),
-                _fmt(row["compute_cost_low"]),
-                _fmt(row["compute_cost_high"]),
-            )
-            _cost_metric(
-                c2, "Storage /mo",
-                _fmt(row["storage_cost_monthly"]),
-                _fmt(row["storage_cost_low"]),
-                _fmt(row["storage_cost_high"]),
-            )
-            _cost_metric(
-                c3, "Network /mo",
-                _fmt(row["networking_cost_monthly"]),
-                _fmt(row["networking_cost_low"]),
-                _fmt(row["networking_cost_high"]),
-            )
-            _cost_metric(
-                c4, "Total /mo",
-                _fmt(row["total_cost_monthly"]),
-                _fmt(row["total_cost_monthly_low"]),
-                _fmt(row["total_cost_monthly_high"]),
+            # Cost ranges — shown as a CSS grid for even spacing and no gaps
+            st.markdown(
+                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);"
+                f"background:#f8fafc;border-radius:8px;padding:14px 8px;gap:4px'>"
+                f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),      _fmt(row['compute_cost_high']))}"
+                f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),      _fmt(row['storage_cost_high']))}"
+                f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),   _fmt(row['networking_cost_high']))}"
+                f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']),_fmt(row['total_cost_monthly_high']), accent=True)}"
+                f"</div>",
+                unsafe_allow_html=True,
             )
 
             # Effort row
@@ -233,13 +210,13 @@ def render_request_history_page() -> None:
             effort_max   = (detail or {}).get("effort_total_days_max")
 
             if effort_level and effort_est is not None:
-                _divider()
+                _sep()
                 st.markdown(
                     f"<p style='margin:0;font-size:0.85rem;color:#374151'>"
                     f"<span style='font-weight:600;margin-right:10px'>Effort</span>"
                     f"{_effort_badge(effort_level)}"
                     f"&nbsp;&nbsp;"
-                    f"<span>{effort_est} days estimated</span>"
+                    f"<span style='color:#374151'>{effort_est} days estimated</span>"
                     f"&nbsp;&nbsp;"
                     f"<span style='color:#9ca3af'>({effort_min} – {effort_max} day range)</span>"
                     f"</p>",
