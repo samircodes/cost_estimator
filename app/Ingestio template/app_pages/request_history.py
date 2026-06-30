@@ -19,11 +19,25 @@ def _fmt(val) -> str:
 
 def _cost_metric(col, label: str, value: str, low: str, high: str) -> None:
     col.markdown(
-        f"<p style='margin:0 0 3px;font-size:0.72rem;color:#6b7280;font-weight:600;"
-        f"text-transform:uppercase;letter-spacing:0.05em'>{label}</p>"
-        f"<p style='margin:0 0 4px;font-size:1.25rem;font-weight:700;color:#111827'>{value}</p>"
-        f"<p style='margin:0;font-size:0.75rem;color:#9ca3af'>{low} – {high}</p>",
+        f"<div style='padding:4px 0'>"
+        f"<p style='margin:0 0 3px;font-size:0.70rem;color:#6b7280;font-weight:600;"
+        f"text-transform:uppercase;letter-spacing:0.06em'>{label}</p>"
+        f"<p style='margin:0 0 4px;font-size:1.2rem;font-weight:700;color:#111827'>{value}</p>"
+        f"<p style='margin:0;font-size:0.73rem;color:#9ca3af'>{low} – {high}</p>"
+        f"</div>",
         unsafe_allow_html=True,
+    )
+
+
+def _type_badge(ingestion_type: str) -> str:
+    if (ingestion_type or "").lower().startswith("new"):
+        bg, fg = "dbeafe", "1e40af"
+    else:
+        bg, fg = "d1fae5", "065f46"
+    return (
+        f"<span style='background:#{bg};color:#{fg};padding:3px 12px;"
+        f"border-radius:5px;font-size:0.78rem;font-weight:700;white-space:nowrap'>"
+        f"{ingestion_type or '—'}</span>"
     )
 
 
@@ -132,7 +146,7 @@ def render_request_history_page() -> None:
         )
         return
 
-    # ── Summary bar ───────────────────────────────────────────────────────────
+    # ── Summary metrics ────────────────────────────────────────────────────────
     total_monthly = sum(float(r["total_cost_monthly"] or 0) for r in rows)
     total_annual  = sum(float(r["total_cost_annual"]  or 0) for r in rows)
     s1, s2, s3 = st.columns(3)
@@ -142,20 +156,49 @@ def render_request_history_page() -> None:
 
     st.markdown("---")
 
+    # ── Sort control ───────────────────────────────────────────────────────────
+    left_label, sort_col = st.columns([3, 2])
+    left_label.markdown(
+        f"<p style='margin:6px 0 0;font-size:0.9rem;color:#6b7280'>"
+        f"{len(rows)} request{'s' if len(rows) != 1 else ''}</p>",
+        unsafe_allow_html=True,
+    )
+    with sort_col:
+        sort_order = st.radio(
+            "Sort by date",
+            options=["Newest first", "Oldest first"],
+            horizontal=True,
+        )
+
+    # DB returns newest-first; reverse for oldest-first
+    sorted_rows = rows if sort_order == "Newest first" else list(reversed(rows))
+
+    st.markdown("")
+
     # ── Request cards ─────────────────────────────────────────────────────────
-    for row in rows:
+    for row in sorted_rows:
         with st.container(border=True):
 
-            # Header: ingestion type · requestor · business unit · date
-            h1, h2, h3, h4 = st.columns([1.5, 2, 2, 2])
-            h1.markdown(f"**{row['ingestion_type'] or '—'}**")
-            h2.markdown(f"**{row['requestor'] or '—'}**")
-            h3.markdown(f"{row['business_unit'] or '—'}")
-            h4.markdown(f"{row['request_date'] or '—'}")
+            # Header: type badge · requestor · business unit · date
+            h1, h2, h3 = st.columns([2, 3, 2])
+            h1.markdown(_type_badge(row["ingestion_type"]), unsafe_allow_html=True)
+            h2.markdown(
+                f"<p style='margin:2px 0 0;font-size:0.92rem;color:#111827;line-height:1.4'>"
+                f"<strong>{row['requestor'] or '—'}</strong>"
+                f"<span style='color:#d1d5db'> · </span>"
+                f"<span style='color:#6b7280'>{row['business_unit'] or '—'}</span>"
+                f"</p>",
+                unsafe_allow_html=True,
+            )
+            h3.markdown(
+                f"<p style='margin:2px 0 0;font-size:0.85rem;color:#9ca3af;text-align:right'>"
+                f"{row['request_date'] or '—'}</p>",
+                unsafe_allow_html=True,
+            )
 
             _divider()
 
-            # Cost columns — midpoint value + low–high range below
+            # Cost breakdown with ±10% ranges
             c1, c2, c3, c4 = st.columns(4)
             _cost_metric(
                 c1, "Compute /mo",
@@ -182,7 +225,7 @@ def render_request_history_page() -> None:
                 _fmt(row["total_cost_monthly_high"]),
             )
 
-            # Effort row (populated for both existing and new source via detail_map)
+            # Effort row
             detail = detail_map.get(row["request_id"])
             effort_level = (detail or {}).get("effort_complexity_level")
             effort_est   = (detail or {}).get("effort_total_days_estimate")

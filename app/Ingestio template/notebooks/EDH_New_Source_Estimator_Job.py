@@ -757,7 +757,7 @@ if save_results:
 # SECTION 13: SAVE TO COMBINED RESULT TABLE (both ingestion types)
 # ============================================================
 
-VARIANCE_FACTOR = 0.20
+VARIANCE_FACTOR = 0.10
 
 def apply_variance(value, variance=VARIANCE_FACTOR):
     return round(value * (1 - variance), 2), round(value * (1 + variance), 2)
