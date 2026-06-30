@@ -196,34 +196,34 @@ def render_new_ingestion_page() -> None:
 
         # ── Section 4: Data characteristics ──────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_q, col_r, col_s = st.columns(3, gap="large")
-        with col_q:
-            render_field_intro(17, "Data distribution", "Is the data expected to be evenly spread, or could a small number of records make up most of the volume?")
-            data_distribution = st.selectbox(
-                "Data distribution",
-                options=DATA_DISTRIBUTIONS,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
-        with col_r:
-            render_field_intro(18, "Delivery pattern", "How will this data typically be delivered each time?")
-            delivery_pattern = st.selectbox(
-                "Delivery pattern",
-                options=DELIVERY_PATTERNS,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
-        with col_s:
-            render_field_intro(19, "Partition key", "Does the data have a natural field to split it by (e.g. date, region, account)?")
-            partition_key_availability = st.selectbox(
-                "Partition key",
-                options=PARTITION_KEY_AVAILABILITIES,
-                index=None,
-                placeholder="Select",
-                label_visibility="collapsed",
-            )
+        render_field_intro(17, "Data distribution", "Is the data expected to be evenly spread, or could a small number of records make up most of the volume?")
+        data_distribution = st.selectbox(
+            "Data distribution",
+            options=DATA_DISTRIBUTIONS,
+            index=None,
+            placeholder="Select",
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        render_field_intro(18, "Delivery pattern", "How will this data typically be delivered each time?")
+        delivery_pattern = st.selectbox(
+            "Delivery pattern",
+            options=DELIVERY_PATTERNS,
+            index=None,
+            placeholder="Select",
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        render_field_intro(19, "Partition key", "Does the data have a natural field to split it by (e.g. date, region, account)?")
+        partition_key_availability = st.selectbox(
+            "Partition key",
+            options=PARTITION_KEY_AVAILABILITIES,
+            index=None,
+            placeholder="Select",
+            label_visibility="collapsed",
+        )
 
         # ── Section 5: Effort estimation ──────────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)

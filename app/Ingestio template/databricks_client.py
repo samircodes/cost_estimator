@@ -7,7 +7,12 @@ from databricks.sdk.service.sql import StatementState
 
 import json
 
-from app_config import COMBINED_ESTIMATIONS_TABLE, ESTIMATOR_JOB_ID
+from app_config import (
+    COMBINED_ESTIMATIONS_TABLE,
+    COST_ESTIMATES_TABLE,
+    ESTIMATOR_JOB_ID,
+    NEW_SOURCE_REQUESTS_TABLE,
+)
 
 
 def _client() -> WorkspaceClient:
@@ -109,6 +114,75 @@ def fetch_all_estimates() -> list[dict[str, Any]]:
         f"ORDER BY estimation_timestamp DESC",
     )
     return [dict(zip(COMBINED_COLS, row)) for row in rows]
+
+
+EXISTING_SOURCE_DETAIL_COLS = [
+    "request_id",
+    "source_type",
+    "data_format",
+    "additional_gb",
+    "load_type",
+    "ingestion_frequency",
+    "primary_key_available",
+    "delete_handling",
+    "schema_stability",
+    "cdc_method",
+    "contains_phi",
+    "effort_complexity_level",
+    "effort_total_days_min",
+    "effort_total_days_estimate",
+    "effort_total_days_max",
+]
+
+NEW_SOURCE_DETAIL_COLS = [
+    "request_id",
+    "pipeline_name",
+    "source_gb",
+    "network_source_type",
+    "copy_interval",
+    "include_egress",
+    "egress_gb",
+    "sla_time_hr",
+    "vm_type",
+    "data_distribution",
+    "delivery_pattern",
+    "partition_key_availability",
+    "complexity_source_type",
+    "transformation_logic",
+    "frequency",
+    "delete_handling",
+    "schema_stability",
+    "cdc_method",
+    "contains_phi",
+]
+
+
+def fetch_all_request_details() -> dict[str, dict[str, Any]]:
+    """Returns a dict keyed by request_id with the original form fields."""
+    client = _client()
+    result: dict[str, dict[str, Any]] = {}
+
+    try:
+        sel = ", ".join(EXISTING_SOURCE_DETAIL_COLS)
+        rows = _run_query(client, f"SELECT {sel} FROM {COST_ESTIMATES_TABLE}")
+        for row in rows:
+            d = dict(zip(EXISTING_SOURCE_DETAIL_COLS, row))
+            d["_source"] = "existing"
+            result[d["request_id"]] = d
+    except Exception:
+        pass
+
+    try:
+        sel = ", ".join(NEW_SOURCE_DETAIL_COLS)
+        rows = _run_query(client, f"SELECT {sel} FROM {NEW_SOURCE_REQUESTS_TABLE}")
+        for row in rows:
+            d = dict(zip(NEW_SOURCE_DETAIL_COLS, row))
+            d["_source"] = "new_source"
+            result[d["request_id"]] = d
+    except Exception:
+        pass
+
+    return result
 
 
 def _get_warehouse_id(client: WorkspaceClient) -> str:
