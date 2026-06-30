@@ -179,10 +179,12 @@ NEW_SOURCE_DETAIL_COLS = [
 ]
 
 
-def fetch_all_request_details() -> dict[str, dict[str, Any]]:
-    """Returns a dict keyed by request_id with the original form fields."""
+def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Returns (detail_map, errors). detail_map keyed by request_id; errors is a list of
+    human-readable strings for any table that could not be queried."""
     client = _client()
     result: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
 
     try:
         sel = ", ".join(EXISTING_SOURCE_DETAIL_COLS)
@@ -191,8 +193,8 @@ def fetch_all_request_details() -> dict[str, dict[str, Any]]:
             d = dict(zip(EXISTING_SOURCE_DETAIL_COLS, row))
             d["_source"] = "existing"
             result[d["request_id"]] = d
-    except Exception:
-        pass
+    except Exception as exc:
+        errors.append(f"Could not load existing-source form details ({COST_ESTIMATES_TABLE}): {exc}")
 
     try:
         sel = ", ".join(NEW_SOURCE_DETAIL_COLS)
@@ -201,10 +203,10 @@ def fetch_all_request_details() -> dict[str, dict[str, Any]]:
             d = dict(zip(NEW_SOURCE_DETAIL_COLS, row))
             d["_source"] = "new_source"
             result[d["request_id"]] = d
-    except Exception:
-        pass
+    except Exception as exc:
+        errors.append(f"Could not load new-source form details ({NEW_SOURCE_REQUESTS_TABLE}): {exc}")
 
-    return result
+    return result, errors
 
 
 def _get_warehouse_id(client: WorkspaceClient) -> str:

@@ -91,10 +91,13 @@ def render_request_history_page() -> None:
 
     try:
         rows = fetch_all_estimates()
-        detail_map = fetch_all_request_details()
+        detail_map, detail_errors = fetch_all_request_details()
     except Exception as exc:
         st.error(f"Could not load request history: {exc}")
         return
+
+    for err in detail_errors:
+        st.warning(err)
 
     if not rows:
         render_empty_state(
