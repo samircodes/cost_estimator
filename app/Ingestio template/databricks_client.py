@@ -1,11 +1,10 @@
+import json
 import time
 from typing import Any
 
+from databricks.connect import DatabricksSession
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
-from databricks.sdk.service.sql import StatementState
-
-import json
 
 from app_config import (
     COMBINED_ESTIMATIONS_TABLE,
@@ -17,16 +16,19 @@ from app_config import (
 
 
 def _client() -> WorkspaceClient:
-    # Inside a Databricks App the SDK auto-authenticates via the environment.
     return WorkspaceClient()
 
 
+def _spark() -> DatabricksSession:
+    return DatabricksSession.builder.getOrCreate()
+
+
+def _run_query(statement: str) -> list[list]:
+    rows = _spark().sql(statement).collect()
+    return [list(row) for row in rows]
+
+
 def trigger_estimator_job(request_type: str, payload: dict) -> int:
-    """
-    Single entry point for both 'existing_source' and 'new_source' requests.
-    Calls the dispatcher job which routes to the correct estimator notebook.
-    payload must include a non-empty 'request_id' and all fields for that form.
-    """
     run = _client().jobs.run_now(
         job_id=ESTIMATOR_JOB_ID,
         job_parameters={
@@ -38,11 +40,10 @@ def trigger_estimator_job(request_type: str, payload: dict) -> int:
 
 
 def wait_for_run(run_id: int, timeout_seconds: int = 300) -> tuple[bool, str]:
-    """Poll until the run finishes. Returns (success, message)."""
-    client = _client()
+    client   = _client()
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        run = client.jobs.get_run(run_id=run_id)
+        run   = client.jobs.get_run(run_id=run_id)
         state = run.state
         if state.life_cycle_state in (
             RunLifeCycleState.TERMINATED,
@@ -84,57 +85,18 @@ COMBINED_COLS = [
 _SELECT = ", ".join(COMBINED_COLS)
 
 
-def _run_query(client: WorkspaceClient, statement: str) -> list[list]:
-    response = client.statement_execution.execute_statement(
-        warehouse_id=_get_warehouse_id(client),
-        statement=statement,
-        wait_timeout="50s",
-    )
-    state = response.status.state if response.status else None
-
-    # If the warehouse was starting up the statement may still be running —
-    # poll until it finishes (up to 70 more seconds, 120s total).
-    if state in (StatementState.RUNNING, StatementState.PENDING):
-        statement_id = response.statement_id
-        for _ in range(14):
-            time.sleep(5)
-            response = client.statement_execution.get_statement(
-                statement_id=statement_id
-            )
-            state = response.status.state if response.status else None
-            if state not in (StatementState.RUNNING, StatementState.PENDING):
-                break
-
-    if state != StatementState.SUCCEEDED:
-        error_detail = ""
-        if response.status and response.status.error:
-            error_detail = f" — {response.status.error.message}"
-        raise RuntimeError(
-            f"Query did not succeed (state={state})"
-            f"{error_detail or '. The SQL warehouse may still be starting up — try refreshing.'}"
-        )
-
-    if response.result is None or response.result.data_array is None:
-        return []
-    return response.result.data_array
-
-
 def fetch_cost_estimate(request_id: str) -> dict[str, Any] | None:
-    client = _client()
     rows = _run_query(
-        client,
         f"SELECT {_SELECT} FROM {COMBINED_ESTIMATIONS_TABLE} "
-        f"WHERE request_id = '{request_id}' LIMIT 1",
+        f"WHERE request_id = '{request_id}' LIMIT 1"
     )
     return dict(zip(COMBINED_COLS, rows[0])) if rows else None
 
 
 def fetch_all_estimates() -> list[dict[str, Any]]:
-    client = _client()
     rows = _run_query(
-        client,
         f"SELECT {_SELECT} FROM {COMBINED_ESTIMATIONS_TABLE} "
-        f"ORDER BY estimation_timestamp DESC",
+        f"ORDER BY estimation_timestamp DESC"
     )
     return [dict(zip(COMBINED_COLS, row)) for row in rows]
 
@@ -179,7 +141,6 @@ NEW_SOURCE_DETAIL_COLS = [
     "contains_phi",
 ]
 
-
 NEW_SOURCE_EFFORT_COLS = [
     "request_id",
     "complexity_level",
@@ -190,15 +151,13 @@ NEW_SOURCE_EFFORT_COLS = [
 
 
 def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """Returns (detail_map, errors). detail_map keyed by request_id; errors is a list of
-    human-readable strings for any table that could not be queried."""
-    client = _client()
+    """Returns (detail_map, errors). detail_map keyed by request_id."""
     result: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
 
     try:
-        sel = ", ".join(EXISTING_SOURCE_DETAIL_COLS)
-        rows = _run_query(client, f"SELECT {sel} FROM {COST_ESTIMATES_TABLE}")
+        sel  = ", ".join(EXISTING_SOURCE_DETAIL_COLS)
+        rows = _run_query(f"SELECT {sel} FROM {COST_ESTIMATES_TABLE}")
         for row in rows:
             d = dict(zip(EXISTING_SOURCE_DETAIL_COLS, row))
             d["_source"] = "existing"
@@ -207,8 +166,8 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
         errors.append(f"Could not load existing-source form details ({COST_ESTIMATES_TABLE}): {exc}")
 
     try:
-        sel = ", ".join(NEW_SOURCE_DETAIL_COLS)
-        rows = _run_query(client, f"SELECT {sel} FROM {NEW_SOURCE_REQUESTS_TABLE}")
+        sel  = ", ".join(NEW_SOURCE_DETAIL_COLS)
+        rows = _run_query(f"SELECT {sel} FROM {NEW_SOURCE_REQUESTS_TABLE}")
         for row in rows:
             d = dict(zip(NEW_SOURCE_DETAIL_COLS, row))
             d["_source"] = "new_source"
@@ -216,13 +175,11 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
     except Exception as exc:
         errors.append(f"Could not load new-source form details ({NEW_SOURCE_REQUESTS_TABLE}): {exc}")
 
-    # Merge effort data for new-source requests (stored in a separate table with
-    # different column names — normalise to the same keys used for existing source).
     try:
-        sel = ", ".join(NEW_SOURCE_EFFORT_COLS)
-        rows = _run_query(client, f"SELECT {sel} FROM {NEW_SOURCE_ESTIMATIONS_TABLE}")
+        sel  = ", ".join(NEW_SOURCE_EFFORT_COLS)
+        rows = _run_query(f"SELECT {sel} FROM {NEW_SOURCE_ESTIMATIONS_TABLE}")
         for row in rows:
-            d = dict(zip(NEW_SOURCE_EFFORT_COLS, row))
+            d   = dict(zip(NEW_SOURCE_EFFORT_COLS, row))
             rid = d["request_id"]
             if rid in result:
                 result[rid]["effort_complexity_level"]    = d["complexity_level"]
@@ -233,10 +190,3 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
         errors.append(f"Could not load new-source effort data ({NEW_SOURCE_ESTIMATIONS_TABLE}): {exc}")
 
     return result, errors
-
-
-def _get_warehouse_id(client: WorkspaceClient) -> str:
-    warehouses = list(client.warehouses.list())
-    if not warehouses:
-        raise RuntimeError("No SQL warehouse found in the workspace.")
-    return warehouses[0].id
