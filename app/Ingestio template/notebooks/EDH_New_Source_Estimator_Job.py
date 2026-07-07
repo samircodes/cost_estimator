@@ -62,6 +62,16 @@ dbutils.widgets.dropdown("save_results", "true", ["true", "false"])
 # COMMAND ----------
 
 # ============================================================
+# CATALOG / SCHEMA TARGET
+# ============================================================
+
+# Change CATALOG / SCHEMA when promoting to production.
+CATALOG = "edh"
+SCHEMA  = "ingestion"
+
+# COMMAND ----------
+
+# ============================================================
 # SECTION 2: ENGINEERING CONSTANTS
 # ============================================================
 
@@ -701,8 +711,8 @@ request_row = [(
 if save_results:
     df_request = spark.createDataFrame(request_row, request_schema)
     df_request.write.format("delta").mode("append").option("mergeSchema", "true") \
-        .saveAsTable("edh.ingestion.edh_newsource_requests")
-    print(f"Saved request to edh.ingestion.edh_newsource_requests - request_id={request_id}")
+        .saveAsTable(f"{CATALOG}.{SCHEMA}.edh_newsource_requests")
+    print(f"Saved request to {CATALOG}.{SCHEMA}.edh_newsource_requests - request_id={request_id}")
 
 # COMMAND ----------
 
@@ -788,8 +798,8 @@ result_row = [(
 if save_results:
     df_result = spark.createDataFrame(result_row, result_schema)
     df_result.write.format("delta").mode("append").option("mergeSchema", "true") \
-        .saveAsTable("edh.ingestion.edh_newsource_estimations")
-    print(f"Saved results to edh.ingestion.edh_newsource_estimations - request_id={request_id}")
+        .saveAsTable(f"{CATALOG}.{SCHEMA}.edh_newsource_estimations")
+    print(f"Saved results to {CATALOG}.{SCHEMA}.edh_newsource_estimations - request_id={request_id}")
 
 # COMMAND ----------
 
@@ -854,7 +864,7 @@ if save_results:
       .format("delta") \
       .mode("append") \
       .option("mergeSchema", "true") \
-      .saveAsTable("edh.ingestion.edh_combined_estimations")
-    print(f"Saved to edh.ingestion.edh_combined_estimations - request_id={request_id}")
+      .saveAsTable(f"{CATALOG}.{SCHEMA}.edh_combined_estimations")
+    print(f"Saved to {CATALOG}.{SCHEMA}.edh_combined_estimations - request_id={request_id}")
 else:
     print("save_results=false - skipping all Delta table writes.")
