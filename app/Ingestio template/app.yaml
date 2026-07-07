@@ -21,3 +21,5 @@ env:
     valueFrom: "new_source_requests_table"
   - name: NEW_SOURCE_ESTIMATIONS_TABLE
     valueFrom: "new_source_estimations_table"
+  - name: ADMIN_USERS
+    value: "samirwindz007@gmail.com,prashant@ryansg.com"
