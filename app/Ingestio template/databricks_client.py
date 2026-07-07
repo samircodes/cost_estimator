@@ -12,6 +12,8 @@ from app_config import (
     ESTIMATOR_JOB_ID,
     NEW_SOURCE_ESTIMATIONS_TABLE,
     NEW_SOURCE_REQUESTS_TABLE,
+    SOURCE_SYSTEM_ESTIMATIONS_TABLE,
+    SOURCE_SYSTEM_REQUESTS_TABLE,
 )
 
 
@@ -149,6 +151,32 @@ NEW_SOURCE_EFFORT_COLS = [
     "total_effort_days_max",
 ]
 
+SOURCE_SYSTEM_DETAIL_COLS = [
+    "request_id",
+    "ingestion_method",
+    "source_system",
+    "data_structure",
+    "source_objects",
+    "edh_table_names",
+    "n_objects",
+    "additional_gb",
+    "ingestion_frequency",
+    "load_type",
+    "primary_key_available",
+    "delete_handling",
+    "schema_stability",
+    "cdc_method",
+    "contains_phi",
+]
+
+SOURCE_SYSTEM_EFFORT_COLS = [
+    "request_id",
+    "complexity_level",
+    "total_effort_days_min",
+    "total_effort_days_estimate",
+    "total_effort_days_max",
+]
+
 
 def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Returns (detail_map, errors). detail_map keyed by request_id."""
@@ -188,5 +216,29 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
                 result[rid]["effort_total_days_max"]      = d["total_effort_days_max"]
     except Exception as exc:
         errors.append(f"Could not load new-source effort data ({NEW_SOURCE_ESTIMATIONS_TABLE}): {exc}")
+
+    try:
+        sel  = ", ".join(SOURCE_SYSTEM_DETAIL_COLS)
+        rows = _run_query(f"SELECT {sel} FROM {SOURCE_SYSTEM_REQUESTS_TABLE}")
+        for row in rows:
+            d = dict(zip(SOURCE_SYSTEM_DETAIL_COLS, row))
+            d["_source"] = "source_system"
+            result[d["request_id"]] = d
+    except Exception as exc:
+        errors.append(f"Could not load source-system form details ({SOURCE_SYSTEM_REQUESTS_TABLE}): {exc}")
+
+    try:
+        sel  = ", ".join(SOURCE_SYSTEM_EFFORT_COLS)
+        rows = _run_query(f"SELECT {sel} FROM {SOURCE_SYSTEM_ESTIMATIONS_TABLE}")
+        for row in rows:
+            d   = dict(zip(SOURCE_SYSTEM_EFFORT_COLS, row))
+            rid = d["request_id"]
+            if rid in result:
+                result[rid]["effort_complexity_level"]    = d["complexity_level"]
+                result[rid]["effort_total_days_min"]      = d["total_effort_days_min"]
+                result[rid]["effort_total_days_estimate"] = d["total_effort_days_estimate"]
+                result[rid]["effort_total_days_max"]      = d["total_effort_days_max"]
+    except Exception as exc:
+        errors.append(f"Could not load source-system effort data ({SOURCE_SYSTEM_ESTIMATIONS_TABLE}): {exc}")
 
     return result, errors

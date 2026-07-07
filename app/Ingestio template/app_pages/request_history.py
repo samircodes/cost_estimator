@@ -123,6 +123,34 @@ def _render_new_source_details(detail: dict) -> None:
     g3.markdown(f"**CDC Method**  \n{detail.get('cdc_method') or '—'}")
 
 
+def _render_source_system_details(detail: dict) -> None:
+    st.markdown("##### Source Identification")
+    s1, s2, s3 = st.columns(3)
+    s1.markdown(f"**Ingestion Method**  \n{detail.get('ingestion_method') or '—'}")
+    s2.markdown(f"**Source System**  \n{detail.get('source_system') or '—'}")
+    s3.markdown(f"**Data Structure**  \n{detail.get('data_structure') or '—'}")
+
+    st.markdown("##### Source Objects")
+    source_objects  = (detail.get("source_objects")  or "").split(",")
+    edh_table_names = (detail.get("edh_table_names") or "").split(",")
+    for src, edh in zip(source_objects, edh_table_names):
+        if src.strip():
+            st.markdown(f"- **{src.strip()}** → `{edh.strip()}`")
+
+    st.markdown("##### Load Configuration")
+    l1, l2, l3 = st.columns(3)
+    l1.markdown(f"**Volume**  \n{detail.get('additional_gb') or '—'} GB")
+    l2.markdown(f"**Frequency**  \n{detail.get('ingestion_frequency') or '—'}")
+    l3.markdown(f"**Load Type**  \n{detail.get('load_type') or '—'}")
+
+    st.markdown("##### Governance")
+    g1, g2, g3, g4 = st.columns(4)
+    g1.markdown(f"**Primary Key**  \n{detail.get('primary_key_available') or '—'}")
+    g2.markdown(f"**Delete Handling**  \n{detail.get('delete_handling') or '—'}")
+    g3.markdown(f"**Schema Stability**  \n{detail.get('schema_stability') or '—'}")
+    g4.markdown(f"**CDC Method**  \n{detail.get('cdc_method') or '—'}")
+
+
 def render_request_history_page() -> None:
     if not is_admin():
         st.error("You do not have permission to view this page.")
@@ -254,5 +282,7 @@ def render_request_history_page() -> None:
                     )
                     if detail["_source"] == "existing":
                         _render_existing_details(detail)
+                    elif detail["_source"] == "source_system":
+                        _render_source_system_details(detail)
                     else:
                         _render_new_source_details(detail)
