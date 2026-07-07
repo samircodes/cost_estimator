@@ -56,9 +56,13 @@ str_payload = {k: str(v) for k, v in payload.items()}
 
 # COMMAND ----------
 
+current_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+notebook_dir = current_path.rsplit("/", 1)[0]
+
 NOTEBOOK_PATHS = {
-    "existing_source": "/Workspace/Users/samirwindz007@gmail.com/cost_estimator/app/Ingestio template/notebooks/EDH_Cost_Estimator_Job",
-    "new_source":      "/Workspace/Users/samirwindz007@gmail.com/cost_estimator/app/Ingestio template/notebooks/EDH_New_Source_Estimator_Job",
+    "existing_source": f"{notebook_dir}/EDH_Cost_Estimator_Job",
+    "new_source":      f"{notebook_dir}/EDH_New_Source_Estimator_Job",
+    "source_system":   f"{notebook_dir}/EDH_Source_System_Estimator_Job",
 }
 
 if request_type not in NOTEBOOK_PATHS:
