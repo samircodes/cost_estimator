@@ -19,6 +19,10 @@ YES_NO = ("Yes", "No")
 LOAD_TYPES = ("Bulk", "Incremental")
 INGESTION_METHODS = tuple(INGESTION_SOURCE_MAP.keys())
 
+ALL_DATA_STRUCTURES = (
+    "Sql Server", "Sybase", "Postgres", "csv", "parquet", "xlsb", "xls", "API", "Other",
+)
+
 _EMPTY_OBJECTS = pd.DataFrame({"Source Object": [""], "EDH Table Name": [""]})
 
 
@@ -50,11 +54,11 @@ def render_source_systems_page() -> None:
             key="ss_ingestion_method",
         )
 
-    source_systems = list(INGESTION_SOURCE_MAP.get(ingestion_method or "", {}).keys())
+    source_systems = list(INGESTION_SOURCE_MAP.get(ingestion_method or "", {}).keys()) + ["Other (not in list)"]
 
     with col2:
-        render_field_intro(2, "Source system", "Select the source system this data comes from")
-        source_system = st.selectbox(
+        render_field_intro(2, "Source system", "Select the source system, or choose 'Other' to type a custom value")
+        source_system_select = st.selectbox(
             "Source system",
             options=source_systems,
             index=None,
@@ -64,18 +68,41 @@ def render_source_systems_page() -> None:
             key="ss_source_system",
         )
 
-    data_structure = INGESTION_SOURCE_MAP.get(ingestion_method or "", {}).get(source_system or "", None)
+    is_custom_source = source_system_select == "Other (not in list)"
 
-    if data_structure:
+    if is_custom_source:
+        source_system_custom = st.text_input(
+            "Custom source system name",
+            placeholder="e.g. MYAPP-PROD",
+            key="ss_source_system_custom",
+        )
+        source_system = source_system_custom.strip() or None
+    else:
+        source_system = source_system_select
+
+    # Auto-detect data structure from mapping; None if custom source selected
+    auto_data_structure = INGESTION_SOURCE_MAP.get(ingestion_method or "", {}).get(source_system or "", None)
+
+    # Always show data structure selector — pre-filled when auto-detected, editable always
+    if ingestion_method:
         st.markdown(
-            f"<div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;"
-            f"padding:10px 16px;margin:8px 0 16px'>"
-            f"<span style='font-size:0.78rem;color:#166534;font-weight:700;"
-            f"text-transform:uppercase;letter-spacing:0.06em'>Source Data Structure</span>"
-            f"<span style='font-size:1rem;font-weight:700;color:#14532d;"
-            f"margin-left:12px'>{data_structure}</span></div>",
+            "<div class='field-intro'><span>&#8594;</span><div>"
+            "<strong>Source data structure</strong>"
+            "<small>Auto-filled from your source system — change if needed</small>"
+            "</div></div>",
             unsafe_allow_html=True,
         )
+        auto_index = list(ALL_DATA_STRUCTURES).index(auto_data_structure) if auto_data_structure in ALL_DATA_STRUCTURES else None
+        data_structure = st.selectbox(
+            "Source data structure",
+            options=ALL_DATA_STRUCTURES,
+            index=auto_index,
+            placeholder="Select data structure",
+            label_visibility="collapsed",
+            key="ss_data_structure",
+        )
+    else:
+        data_structure = None
 
     # ── Source Objects & EDH Table Names ─────────────────────────────────────
     st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
@@ -223,8 +250,14 @@ def render_source_systems_page() -> None:
         if not ingestion_method:
             st.error("Please select an Ingestion Method.")
             return
-        if not source_system:
+        if not source_system_select:
             st.error("Please select a Source System.")
+            return
+        if is_custom_source and not source_system:
+            st.error("Please type a name for your custom source system.")
+            return
+        if not data_structure:
+            st.error("Please select a Source Data Structure.")
             return
 
         # Validate source objects table
