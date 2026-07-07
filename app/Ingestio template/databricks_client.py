@@ -1,9 +1,11 @@
 import json
+import os
 import time
 from typing import Any
 
 from databricks.connect import DatabricksSession
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.config import Config
 from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
 
 from app_config import (
@@ -15,12 +17,20 @@ from app_config import (
 )
 
 
+def _config() -> Config:
+    return Config(
+        host=os.environ["DATABRICKS_HOST"],
+        client_id=os.environ["DATABRICKS_CLIENT_ID"],
+        client_secret=os.environ["DATABRICKS_CLIENT_SECRET"],
+    )
+
+
 def _client() -> WorkspaceClient:
-    return WorkspaceClient()
+    return WorkspaceClient(config=_config())
 
 
 def _spark() -> DatabricksSession:
-    return DatabricksSession.builder.serverless(True).getOrCreate()
+    return DatabricksSession.builder.sdkConfig(_config()).serverless(True).getOrCreate()
 
 
 def _run_query(statement: str) -> list[list]:

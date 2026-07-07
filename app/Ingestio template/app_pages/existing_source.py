@@ -47,10 +47,9 @@ def render_existing_source_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_c, col_d = st.columns(2, gap="large")
         with col_c:
-            render_field_intro(3, "Request date", "Date of this request.")
-            request_date = st.date_input(
-                "Request date", value=date.today(), label_visibility="collapsed"
-            )
+            render_field_intro(3, "Request date", "Automatically set to today's date")
+            request_date = date.today()
+            st.markdown(f"**{request_date.strftime('%d %B %Y')}**")
         with col_d:
             render_field_intro(4, "Business justification", "Why is this data needed?")
             business_justification = st.text_input(
@@ -165,6 +164,7 @@ def render_existing_source_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        st.caption("All fields are required. Please ensure everything is filled in before submitting.")
         submitted = st.form_submit_button(
             "Submit request", type="primary", use_container_width=False
         )
