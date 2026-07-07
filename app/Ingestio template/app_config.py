@@ -5,6 +5,7 @@ from dataclasses import dataclass
 HOME_PAGE = "home"
 NEW_INGESTION_PAGE = "new_ingestion"
 EXISTING_SOURCE_PAGE = "existing_source"
+SOURCE_SYSTEM_PAGE = "source_systems"
 REQUEST_HISTORY_PAGE = "request_history"
 
 APP_TITLE = "Ryan | Ingestion Requests"
@@ -137,6 +138,65 @@ DEPENDENCIES_OPTIONS = (
 )
 
 
+# ── EDH source system mapping (Ingestion Method → Source System → Data Structure) ─
+INGESTION_SOURCE_MAP: dict[str, dict[str, str]] = {
+    "Operational Database": {
+        "IMS-RS":               "Sql Server",
+        "VRU":                  "Sql Server",
+        "DATALAYER":            "Sql Server",
+        "AIM":                  "Sql Server",
+        "SMITH":                "Sql Server",
+        "AOP":                  "Sql Server",
+        "C1-LOV":               "Sybase",
+        "ACTUARIAL":            "Sql Server",
+        "IMS-WKFC":             "Sql Server",
+        "C1-RS":                "Sql Server",
+        "ISA":                  "Sql Server",
+        "TREASURY-HISTORICAL":  "Sql Server",
+        "RYANRE-GRS-DM":        "Sql Server",
+        "RYANRE-BITE":          "Sql Server",
+        "CROUSE":               "Sql Server",
+        "TMS":                  "Sql Server",
+        "GRIFFIN":              "Sql Server",
+        "CLAIMS":               "Sql Server",
+        "LOCATION-SERVICES":    "Sql Server",
+        "IMS-RTWPB":            "Sql Server",
+        "IIM":                  "Sql Server",
+        "POLCHAR":              "Sql Server",
+        "RYANRE":               "Sql Server",
+        "Connector":            "Postgres",
+        "AIR-WKFC":             "Sql Server",
+    },
+    "File System": {
+        "360 UW":                       "csv",
+        "AIM":                          "csv",
+        "Alis":                         "csv",
+        "amazon_s3":                    "parquet",
+        "Castel":                       "csv",
+        "Ethos":                        "csv",
+        "EverSports":                   "csv",
+        "FXLoader":                     "csv",
+        "Geo":                          "csv",
+        "credit_ratings":               "csv",
+        "Innovisk":                     "csv",
+        "JMWilson":                     "csv",
+        "SICS":                         "csv",
+        "PricingModels":                "xlsb",
+        "IMS_RS":                       "csv",
+        "ManualDataFeeds":              "csv",
+        "RSUM Manual Adjustment load":  "xls",
+        "SSRU":                         "csv",
+        "Trinity":                      "csv",
+        "USAssure":                     "csv",
+        "Velocity":                     "csv",
+    },
+    "API Endpoint System": {
+        "KYRIBA":        "API",
+        "FXLOADER-DAILY": "API",
+    },
+}
+
+
 @dataclass(frozen=True)
 class RequestType:
     number: str
@@ -171,5 +231,16 @@ REQUEST_TYPES = (
         ),
         button_label="Choose an existing source",
         page=EXISTING_SOURCE_PAGE,
+    ),
+    RequestType(
+        number="03",
+        category="Source systems",
+        title="Add Data from Source Systems",
+        description=(
+            "Request ingestion from a known EDH source system — select your "
+            "ingestion method, source system, and the objects you need."
+        ),
+        button_label="Select a source system",
+        page=SOURCE_SYSTEM_PAGE,
     ),
 )

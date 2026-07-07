@@ -6,11 +6,13 @@ from app_config import (
     HOME_PAGE,
     NEW_INGESTION_PAGE,
     REQUEST_HISTORY_PAGE,
+    SOURCE_SYSTEM_PAGE,
 )
 from app_pages.existing_source import render_existing_source_page
 from app_pages.home import render_home_page
 from app_pages.new_ingestion import render_new_ingestion_page
 from app_pages.request_history import render_request_history_page
+from app_pages.source_systems import render_source_systems_page
 from ui import apply_theme, render_header
 
 
@@ -25,6 +27,7 @@ PAGES = {
     HOME_PAGE: render_home_page,
     NEW_INGESTION_PAGE: render_new_ingestion_page,
     EXISTING_SOURCE_PAGE: render_existing_source_page,
+    SOURCE_SYSTEM_PAGE: render_source_systems_page,
     REQUEST_HISTORY_PAGE: render_request_history_page,
 }
 
