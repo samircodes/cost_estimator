@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from app_config import (
@@ -17,6 +18,8 @@ from ui import render_back_button, render_field_intro, render_form_heading, rend
 YES_NO = ("Yes", "No")
 LOAD_TYPES = ("Bulk", "Incremental")
 INGESTION_METHODS = tuple(INGESTION_SOURCE_MAP.keys())
+
+_EMPTY_OBJECTS = pd.DataFrame({"Source Object": [""], "EDH Table Name": [""]})
 
 
 def render_source_systems_page() -> None:
@@ -77,23 +80,22 @@ def render_source_systems_page() -> None:
     # ── Source Objects & EDH Table Names ─────────────────────────────────────
     st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
     st.markdown("##### Source Objects")
-    st.caption("Paste or type one value per line. Both columns must have the same number of entries.")
 
-    col_obj, col_edh = st.columns(2, gap="large")
-    with col_obj:
-        source_objects_input = st.text_area(
-            "Source Objects (one per line)",
-            placeholder="e.g.\nclaims_header\nclaims_detail\npolicy_master",
-            height=160,
-            key="ss_source_objects",
-        )
-    with col_edh:
-        edh_table_names_input = st.text_area(
-            "EDH Table Names (one per line)",
-            placeholder="e.g.\nedh_claims_header\nedh_claims_detail\nedh_policy_master",
-            height=160,
-            key="ss_edh_table_names",
-        )
+    st.caption(
+        "Add one row per object. Both Source Object and EDH Table Name are required for each row."
+    )
+
+    edited_df = st.data_editor(
+        _EMPTY_OBJECTS,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Source Object":   st.column_config.TextColumn("Source Object",   required=True),
+            "EDH Table Name":  st.column_config.TextColumn("EDH Table Name",  required=True),
+        },
+        key="ss_objects_editor",
+    )
 
     # ── Main form ─────────────────────────────────────────────────────────────
     st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
@@ -225,21 +227,14 @@ def render_source_systems_page() -> None:
             st.error("Please select a Source System.")
             return
 
-        # Validate source objects text areas
-        source_objects_list = [v.strip() for v in source_objects_input.splitlines() if v.strip()]
-        edh_table_names_list = [v.strip() for v in edh_table_names_input.splitlines() if v.strip()]
-
-        if not source_objects_list:
-            st.error("Please enter at least one Source Object.")
-            return
-        if not edh_table_names_list:
-            st.error("Please enter at least one EDH Table Name.")
-            return
-        if len(source_objects_list) != len(edh_table_names_list):
-            st.error(
-                f"Source Objects ({len(source_objects_list)}) and EDH Table Names "
-                f"({len(edh_table_names_list)}) must have the same number of entries."
-            )
+        # Validate source objects table
+        valid_rows = edited_df.dropna(subset=["Source Object", "EDH Table Name"])
+        valid_rows = valid_rows[
+            (valid_rows["Source Object"].str.strip() != "") &
+            (valid_rows["EDH Table Name"].str.strip() != "")
+        ]
+        if valid_rows.empty:
+            st.error("Please add at least one Source Object and EDH Table Name.")
             return
 
         # Validate form fields
@@ -266,6 +261,8 @@ def render_source_systems_page() -> None:
             return
 
         request_id = str(uuid.uuid4())
+        source_objects = valid_rows["Source Object"].str.strip().tolist()
+        edh_table_names = valid_rows["EDH Table Name"].str.strip().tolist()
 
         try:
             trigger_estimator_job(
@@ -279,8 +276,8 @@ def render_source_systems_page() -> None:
                     "ingestion_method":       ingestion_method,
                     "source_system":          source_system,
                     "data_structure":         data_structure,
-                    "source_objects":         ",".join(source_objects_list),
-                    "edh_table_names":        ",".join(edh_table_names_list),
+                    "source_objects":         ",".join(source_objects),
+                    "edh_table_names":        ",".join(edh_table_names),
                     "additional_gb":          str(additional_gb),
                     "ingestion_frequency":    ingestion_frequency,
                     "load_type":              load_type,
