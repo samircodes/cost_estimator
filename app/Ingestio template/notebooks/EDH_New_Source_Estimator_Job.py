@@ -197,7 +197,16 @@ def calculate_network_cost(
 def calculate_storage_cost(
     source_gb: float,
     copy_interval: str = "bulk",
+    frequency: str = "daily",
+    compression_factor: float = 0.30,
 ) -> dict:
+    """
+    compression_factor: fraction of raw source size stored as compressed Delta.
+    Matches EDH_Cost_Estimator_Job COMPRESSION_RATIO_BY_FORMAT (CSV/JDBC=0.30, Parquet=1.00).
+    Default 0.30 reflects typical tabular-to-Delta compression.
+
+    frequency: how often the pipeline runs — drives monthly op count.
+    """
 
     # Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
     ADLS_HOT_RATE        = fetch_adls_storage_price(fallback=0.0208)
@@ -211,9 +220,23 @@ def calculate_storage_cost(
     READ_RATE_PER_10K  = 0.0052
     LIST_RATE_PER_10K  = 0.09
 
-    bronze_gb = source_gb * BRONZE_RATIO
-    silver_gb = source_gb * SILVER_RATIO
-    gold_gb   = source_gb * GOLD_RATIO
+    _RUNS_PER_MONTH = {
+        "adhoc":           1,
+        "weekly":          4,
+        "daily":          30,
+        "hourly":        730,
+        "near_real_time": 4380,   # ~every 10 minutes
+        "real_time":     43800,   # ~every minute
+    }
+    runs_per_month = _RUNS_PER_MONTH.get(frequency, 30)
+
+    # Apply compression: source_gb is the raw uncompressed size;
+    # stored_gb is what actually lands on ADLS after Delta compression.
+    stored_gb = source_gb * compression_factor
+
+    bronze_gb = stored_gb * BRONZE_RATIO
+    silver_gb = stored_gb * SILVER_RATIO
+    gold_gb   = stored_gb * GOLD_RATIO
     total_gb  = bronze_gb + silver_gb + gold_gb
 
     bronze_storage_cost = bronze_gb * ADLS_HOT_RATE
@@ -221,14 +244,15 @@ def calculate_storage_cost(
     gold_storage_cost   = gold_gb   * MANAGED_STORAGE_RATE
     total_storage_cost  = bronze_storage_cost + silver_storage_cost + gold_storage_cost
 
-    avg_files       = max(1, int((source_gb * 1024) / 128))
+    # File-count-based I/O ops: use stored_gb (compressed file count, not raw).
+    avg_files       = max(1, int((stored_gb * 1024) / 128))
     daily_write_ops = avg_files + 3
     daily_read_ops  = avg_files * 2 + 5 if copy_interval == "incremental" else 5
     daily_list_ops  = 4
 
-    monthly_write_ops = daily_write_ops * 30
-    monthly_read_ops  = daily_read_ops  * 30
-    monthly_list_ops  = daily_list_ops  * 30
+    monthly_write_ops = daily_write_ops * runs_per_month
+    monthly_read_ops  = daily_read_ops  * runs_per_month
+    monthly_list_ops  = daily_list_ops  * runs_per_month
 
     write_ops_cost = (monthly_write_ops / 10000) * WRITE_RATE_PER_10K
     read_ops_cost  = (monthly_read_ops  / 10000) * READ_RATE_PER_10K
@@ -238,8 +262,12 @@ def calculate_storage_cost(
     grand_total_monthly = total_storage_cost + total_ops_cost
 
     return {
-        "source_gb":     source_gb,
-        "copy_interval": copy_interval,
+        "source_gb":          source_gb,
+        "stored_gb":          round(stored_gb, 4),
+        "compression_factor": compression_factor,
+        "copy_interval":      copy_interval,
+        "frequency":          frequency,
+        "runs_per_month":     runs_per_month,
         "storage": {
             "bronze_gb":             round(bronze_gb, 2),
             "silver_gb":             round(silver_gb, 3),
@@ -550,7 +578,7 @@ network = calculate_network_cost(
 )
 
 storage = calculate_storage_cost(
-    source_gb=source_gb, copy_interval=copy_interval,
+    source_gb=source_gb, copy_interval=copy_interval, frequency=frequency,
 )
 
 vm_specs = VM_SPECS[vm_type]
@@ -603,7 +631,7 @@ print(f"\n{'-' * 70}")
 print(f"  COST ESTIMATE (Monthly)")
 print(f"{'-' * 70}")
 print(f"  Network Cost      : ${network['total_monthly_cost']}")
-print(f"  Storage Cost      : ${storage['grand_total_monthly']}")
+print(f"  Storage Cost      : ${storage['grand_total_monthly']}  (stored={storage['stored_gb']} GB, compression={storage['compression_factor']}, runs/mo={storage['runs_per_month']})")
 print(f"  Compute Cost      : ${compute['compute_cost_monthly']}")
 print(f"  VM Type           : {vm_type}  (throughput={vm_specs['per_node_throughput_gb_hr']} GB/hr, vm_cost=${vm_specs['vm_cost_hr']}/hr)")
 print(f"  Data Distribution : {data_distribution}  (skew={resolved_skew})")
