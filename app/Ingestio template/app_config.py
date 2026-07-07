@@ -13,6 +13,14 @@ APP_TITLE = "Ryan | Ingestion Requests"
 # Populate after running: databricks bundle deploy
 ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "843013258339321"))
 
+# ── Admin access (comma-separated emails allowed to view the dashboard) ───────
+# e.g. ADMIN_USERS="alice@company.com,bob@company.com"
+ADMIN_USERS: set[str] = {
+    email.strip().lower()
+    for email in os.environ.get("ADMIN_USERS", "").split(",")
+    if email.strip()
+}
+
 # ── Delta tables ──────────────────────────────────────────────────────────────
 COST_ESTIMATES_TABLE         = os.environ.get("COST_ESTIMATES_TABLE",         "edh.ingestion.edh_cost_estimations")
 NEW_SOURCE_REQUESTS_TABLE    = os.environ.get("NEW_SOURCE_REQUESTS_TABLE",    "edh.ingestion.edh_newsource_requests")

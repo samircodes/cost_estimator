@@ -3,7 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app_config import HOME_PAGE, REQUEST_HISTORY_PAGE, RequestType
+from app_config import ADMIN_USERS, HOME_PAGE, REQUEST_HISTORY_PAGE, RequestType
 
 
 STYLES_PATH = Path(__file__).parent / "assets" / "styles.css"
@@ -19,6 +19,14 @@ def navigate_to(page: str) -> None:
     st.rerun()
 
 
+def current_user_email() -> str:
+    return st.context.headers.get("X-Forwarded-Email", "").lower()
+
+
+def is_admin() -> bool:
+    return not ADMIN_USERS or current_user_email() in ADMIN_USERS
+
+
 def render_header() -> None:
     brand_column, action_column = st.columns([2, 1])
 
@@ -27,8 +35,9 @@ def render_header() -> None:
         st.markdown('<span class="brand-name">Ryan Specialty</span>', unsafe_allow_html=True)
 
     with action_column:
-        if st.button("Request History & Costs", key="open_request_history"):
-            navigate_to(REQUEST_HISTORY_PAGE)
+        if is_admin():
+            if st.button("Request History & Costs", key="open_request_history"):
+                navigate_to(REQUEST_HISTORY_PAGE)
 
 
 def render_back_button(key: str) -> None:

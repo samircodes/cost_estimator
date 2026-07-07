@@ -1,7 +1,7 @@
 import streamlit as st
 
 from databricks_client import fetch_all_estimates, fetch_all_request_details
-from ui import render_back_button, render_empty_state, render_page_intro
+from ui import is_admin, render_back_button, render_empty_state, render_page_intro
 
 
 def _fmt(val) -> str:
@@ -124,6 +124,10 @@ def _render_new_source_details(detail: dict) -> None:
 
 
 def render_request_history_page() -> None:
+    if not is_admin():
+        st.error("You do not have permission to view this page.")
+        return
+
     render_back_button("back_from_history")
 
     render_page_intro(

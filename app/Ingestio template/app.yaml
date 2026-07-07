@@ -1,5 +1,23 @@
 command: [
-  "streamlit", 
+  "streamlit",
   "run",
   "app.py"
 ]
+
+env:
+  - name: DATABRICKS_HOST
+    valueFrom: "databricks_host"
+  - name: DATABRICKS_CLIENT_ID
+    valueFrom: "databricks_client_id"
+  - name: DATABRICKS_CLIENT_SECRET
+    valueFrom: "databricks_client_secret"
+  - name: ESTIMATOR_JOB_ID
+    valueFrom: "estimator_job_id"
+  - name: COMBINED_ESTIMATIONS_TABLE
+    valueFrom: "combined_estimations_table"
+  - name: COST_ESTIMATES_TABLE
+    valueFrom: "cost_estimates_table"
+  - name: NEW_SOURCE_REQUESTS_TABLE
+    valueFrom: "new_source_requests_table"
+  - name: NEW_SOURCE_ESTIMATIONS_TABLE
+    valueFrom: "new_source_estimations_table"
