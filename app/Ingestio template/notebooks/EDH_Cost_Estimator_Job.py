@@ -27,6 +27,10 @@ dbutils.widgets.dropdown("save_results",        "true",          ["true", "false
 
 # COMMAND ----------
 
+# MAGIC %run ./EDH_Azure_Pricing_Utils
+
+# COMMAND ----------
+
 # ============================================================
 # SECTION 1: LOOKUP TABLES
 # ============================================================
@@ -63,9 +67,9 @@ TYPICAL_WORKERS = {
     "S3":         2.9,
     "SFTP":       1.5,
 }
-VM_RATE_PER_NODE = 1.808   # Standard_D32ds_v5 on-demand $/hr
-                            # Applies to both L-1-5 and L-SYBASE clusters
-                            # Source: Vantage tracker — confirm against your actual Azure bill
+# Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
+# Standard_D32ds_v5 Linux on-demand — applies to both L-1-5 and L-SYBASE clusters.
+VM_RATE_PER_NODE = fetch_vm_price("Standard_D32ds_v5", fallback=1.808)
 
 CLUSTER_CONFIG = {
     "SQL Server": {"type": "multi",  "dbu_driver": 16, "dbu_per_worker": 6.4},

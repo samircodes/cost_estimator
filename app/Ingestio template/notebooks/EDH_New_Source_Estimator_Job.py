@@ -57,6 +57,10 @@ dbutils.widgets.dropdown("save_results", "true", ["true", "false"])
 
 # COMMAND ----------
 
+# MAGIC %run ./EDH_Azure_Pricing_Utils
+
+# COMMAND ----------
+
 # ============================================================
 # SECTION 2: ENGINEERING CONSTANTS
 # ============================================================
@@ -92,19 +96,23 @@ COMPLEXITY_FACTOR_BY_TRANSFORMATION = {
     "heavy":  2.8,
 }
 
-DBU_COST_HR  = 0.3
+DBU_COST_HR  = 0.3   # Databricks DBU price — not in Azure Retail API
 DRIVER_NODES = 1
+
+# VM prices fetched live from Azure Retail Prices API; fall back to hardcoded if unavailable.
+_vm_ds3_rate = fetch_vm_price("Standard_DS3_v2", fallback=0.293)
+_vm_ds5_rate = fetch_vm_price("Standard_DS5_v2", fallback=1.17)
 
 VM_SPECS = {
     "Standard_DS3_v2": {
         "vcpu": 4, "memory_gib": 14,
         "per_node_throughput_gb_hr": 4.5,
-        "vm_cost_hr": 0.293,
+        "vm_cost_hr": _vm_ds3_rate,
     },
     "Standard_DS5_v2": {
         "vcpu": 16, "memory_gib": 56,
         "per_node_throughput_gb_hr": 18.0,
-        "vm_cost_hr": 1.17,
+        "vm_cost_hr": _vm_ds5_rate,
     },
 }
 
@@ -123,19 +131,22 @@ def calculate_network_cost(
     include_egress: bool = False,
     egress_gb: float = 0.0,
 ) -> dict:
+    # internet_egress and aws_s3/aws_rds rates use the live Azure egress price;
+    # ExpressRoute unlimited / VPN are contractual ($0 metered component).
+    _live_egress = fetch_egress_price(fallback=0.087)
 
     RATES = {
         "azure_same_region":      0.00,
         "expressroute_metered":   0.025,
         "expressroute_unlimited": 0.00,
         "vpn":                    0.00,
-        "aws_s3":                 0.09,
-        "aws_rds":                0.09,
+        "aws_s3":                 _live_egress,
+        "aws_rds":                _live_egress,
         "gcp":                    0.12,
         "sftp":                   0.00,
         "api":                    0.00,
         "private_endpoint":       0.01,
-        "internet_egress":        0.087,
+        "internet_egress":        _live_egress,
         "cross_region":           0.02,
     }
 
@@ -188,8 +199,9 @@ def calculate_storage_cost(
     copy_interval: str = "bulk",
 ) -> dict:
 
-    ADLS_HOT_RATE        = 0.0208
-    MANAGED_STORAGE_RATE = 0.023
+    # Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
+    ADLS_HOT_RATE        = fetch_adls_storage_price(fallback=0.0208)
+    MANAGED_STORAGE_RATE = fetch_adls_storage_price(fallback=0.023)
 
     BRONZE_RATIO = 1.0
     SILVER_RATIO = 0.022

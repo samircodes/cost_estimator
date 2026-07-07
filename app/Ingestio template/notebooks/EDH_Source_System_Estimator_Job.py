@@ -45,6 +45,10 @@ SCHEMA  = "ingestion"
 
 # COMMAND ----------
 
+# MAGIC %run ./EDH_Azure_Pricing_Utils
+
+# COMMAND ----------
+
 # ============================================================
 # SECTION 3: ENGINEERING CONSTANTS
 # ============================================================
@@ -85,8 +89,9 @@ TYPICAL_WORKERS_BY_METHOD = {
     "API Endpoint System":  1.2,
 }
 
-VM_RATE_PER_NODE_HR = 0.38   # Azure Standard_DS3_v2 equivalent
-DBU_PRICE_HR        = 0.07   # Databricks serverless DBU price per hour
+# Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
+VM_RATE_PER_NODE_HR = fetch_vm_price("Standard_DS3_v2", fallback=0.38)
+DBU_PRICE_HR        = 0.07   # Databricks serverless DBU price — not in Azure Retail API
 
 # Each additional source object (table/file/endpoint) adds overhead:
 # extra schema discovery, checkpoint management, and connection slots.
@@ -109,8 +114,9 @@ RUNS_PER_MONTH = {
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 
-STORAGE_RATE_PER_GB     = 0.023   # Azure ADLS Gen2 per GB per month
-TRANSACTION_RATE_PER_GB = 0.004   # Delta transaction overhead per GB
+# Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
+STORAGE_RATE_PER_GB     = fetch_adls_storage_price(fallback=0.023)
+TRANSACTION_RATE_PER_GB = 0.004   # Delta transaction overhead — not in Azure Retail API
 
 # Compression ratio: raw source GB → compressed Delta GB.
 # Parquet is already compressed so ratio is lower.
@@ -128,12 +134,14 @@ COMPRESSION_RATIO_BY_STRUCTURE = {
 # ── Networking ────────────────────────────────────────────────────────────────
 
 # Network cost per GB ingested per run by ingestion method.
-# Operational Database uses private links/ExpressRoute (lower cost).
-# File System costs vary by source location; API has HTTP overhead.
+# Operational Database: private link / ExpressRoute (contractual — not in Azure Retail API).
+# File System: blended estimate for SFTP / internet file sources.
+# API Endpoint System: full internet egress — fetched live from Azure Retail API.
+_egress_rate = fetch_egress_price(fallback=0.087)
 NETWORK_COST_PER_GB = {
     "Operational Database": 0.02,
     "File System":          0.05,
-    "API Endpoint System":  0.09,
+    "API Endpoint System":  _egress_rate,
 }
 
 # ── Effort ────────────────────────────────────────────────────────────────────
