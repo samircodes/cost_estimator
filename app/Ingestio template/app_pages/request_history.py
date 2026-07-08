@@ -85,16 +85,12 @@ def _render_existing_details(detail: dict) -> None:
 
 
 def _render_new_source_details(detail: dict) -> None:
-    st.markdown("##### Pipeline Details")
-    p1, p2 = st.columns(2)
-    p1.markdown(f"**Pipeline Name**  \n{detail.get('pipeline_name') or '—'}")
-    p2.markdown(f"**Data Volume**  \n{detail.get('source_gb') or '—'} GB")
-
     st.markdown("##### Connection")
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(f"**Network Source Type**  \n{detail.get('network_source_type') or '—'}")
-    c2.markdown(f"**Load Type**  \n{detail.get('copy_interval') or '—'}")
-    c3.markdown(f"**VM Type**  \n{detail.get('vm_type') or '—'}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(f"**Data Volume**  \n{detail.get('source_gb') or '—'} GB")
+    c2.markdown(f"**Network Source Type**  \n{detail.get('network_source_type') or '—'}")
+    c3.markdown(f"**Load Type**  \n{detail.get('copy_interval') or '—'}")
+    c4.markdown(f"**VM Type**  \n{detail.get('vm_type') or '—'}")
 
     egress_val = "Yes" if str(detail.get("include_egress", "")).lower() == "true" else "No"
     c4, c5, c6 = st.columns(3)

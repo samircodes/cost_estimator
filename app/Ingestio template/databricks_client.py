@@ -123,7 +123,6 @@ EXISTING_SOURCE_DETAIL_COLS = [
 
 NEW_SOURCE_DETAIL_COLS = [
     "request_id",
-    "pipeline_name",
     "source_gb",
     "network_source_type",
     "copy_interval",

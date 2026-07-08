@@ -22,7 +22,6 @@ dbutils.widgets.dropdown("schema_stability",        "Stable",          ["Stable"
 dbutils.widgets.dropdown("cdc_method",              "Not Applicable",  ["Timestamp", "Log Based", "Not Applicable"])
 
 # ---- New-source cost calculation widgets (business-answerable inputs only) ----
-dbutils.widgets.text(    "pipeline_name",       "New EDH Pipeline")
 dbutils.widgets.text(    "source_gb",           "300")
 dbutils.widgets.dropdown("network_source_type", "expressroute_metered",
                          ["azure_same_region", "expressroute_metered", "expressroute_unlimited",
@@ -140,6 +139,7 @@ def calculate_network_cost(
     source_type: str = "vpn",
     include_egress: bool = False,
     egress_gb: float = 0.0,
+    frequency: str = "daily",
 ) -> dict:
     # internet_egress and aws_s3/aws_rds rates use the live Azure egress price;
     # ExpressRoute unlimited / VPN are contractual ($0 metered component).
@@ -178,8 +178,14 @@ def calculate_network_cost(
 
     egress_cost = egress_gb * RATES["internet_egress"] if include_egress else 0.0
 
+    _RUNS_PER_MONTH = {
+        "adhoc": 1, "weekly": 4, "daily": 30,
+        "hourly": 730, "near_real_time": 4380, "real_time": 43800,
+    }
+    runs_per_month = _RUNS_PER_MONTH.get(frequency, 30)
+
     total_daily   = stage1_cost + stage2_cost + stage3_cost + stage4_cost + stage5_cost + stage6_cost + egress_cost
-    total_monthly = total_daily * 30
+    total_monthly = total_daily * runs_per_month
 
     return {
         "source_gb":   source_gb,
@@ -335,12 +341,18 @@ def calculate_compute_cost_from_sizing(
     sizing: dict,
     vm_cost_hr: float = 1.17,
     dbu_cost_hr: float = DBU_COST_HR,
+    frequency: str = "daily",
 ) -> dict:
+    _RUNS_PER_MONTH = {
+        "adhoc": 1, "weekly": 4, "daily": 30,
+        "hourly": 730, "near_real_time": 4380, "real_time": 43800,
+    }
+    runs_per_month       = _RUNS_PER_MONTH.get(frequency, 30)
     total_nodes          = sizing["total_nodes"]
     total_per_node_hr    = vm_cost_hr + dbu_cost_hr
     cluster_cost_per_hr  = total_nodes * total_per_node_hr
     compute_cost_daily   = sizing["estimated_runtime_hr"] * cluster_cost_per_hr
-    compute_cost_monthly = compute_cost_daily * 30
+    compute_cost_monthly = compute_cost_daily * runs_per_month
 
     return {
         "total_per_node_hr":    round(total_per_node_hr, 4),
@@ -444,7 +456,7 @@ PHASE_EFFORT = {
 TESTING_PERCENTAGE = 0.25
 
 def estimate_effort(
-    pipeline_name: str = 'New Pipeline', source_type: str = 'external_api', volume: str = 'medium',
+    source_type: str = 'external_api', volume: str = 'medium',
     transformation_logic: str = 'medium', frequency: str = 'daily',
     complexity_override: str = None,
 ) -> dict:
@@ -474,7 +486,6 @@ def estimate_effort(
     total_est = sum(p['estimate'] for p in phases.values())
 
     return {
-        'pipeline_name':     pipeline_name,
         'complexity':        complexity,
         'complexity_level':  level,
         'phases':            phases,
@@ -550,7 +561,6 @@ delete_handling        = dbutils.widgets.get("delete_handling")
 schema_stability       = dbutils.widgets.get("schema_stability")
 cdc_method             = dbutils.widgets.get("cdc_method")
 
-pipeline_name              = dbutils.widgets.get("pipeline_name")
 source_gb                  = float(dbutils.widgets.get("source_gb"))
 network_source_type        = dbutils.widgets.get("network_source_type")
 copy_interval              = dbutils.widgets.get("copy_interval")
@@ -585,6 +595,7 @@ validate_inputs(source_gb, copy_interval, network_source_type,
 network = calculate_network_cost(
     source_gb=source_gb, source_type=network_source_type,
     include_egress=include_egress, egress_gb=egress_gb,
+    frequency=frequency,
 )
 
 storage = calculate_storage_cost(
@@ -607,7 +618,7 @@ sizing = calculate_worker_sizing(
     complexity_factor=resolved_complexity_factor,
 )
 
-compute = calculate_compute_cost_from_sizing(sizing, vm_cost_hr=vm_specs["vm_cost_hr"])
+compute = calculate_compute_cost_from_sizing(sizing, vm_cost_hr=vm_specs["vm_cost_hr"], frequency=frequency)
 
 total_monthly_cost  = round(network["total_monthly_cost"] + storage["grand_total_monthly"] + compute["compute_cost_monthly"], 2)
 total_annual_cost   = round(total_monthly_cost * 12, 2)
@@ -616,7 +627,7 @@ cost_per_gb_monthly = round(total_monthly_cost / source_gb, 4) if source_gb > 0 
 derived_volume_tier = get_volume_tier(source_gb)
 
 effort = estimate_effort(
-    pipeline_name=pipeline_name, source_type=complexity_source_type, volume=derived_volume_tier,
+    source_type=complexity_source_type, volume=derived_volume_tier,
     transformation_logic=transformation_logic, frequency=frequency,
 )
 
@@ -630,7 +641,6 @@ print("=" * 70)
 print("  EDH NEW-SOURCE ONBOARDING ESTIMATE")
 print("=" * 70)
 print(f"\n  REQUEST DETAILS")
-print(f"  Pipeline Name     : {pipeline_name}")
 print(f"  Business Unit     : {business_unit}")
 print(f"  Requestor         : {requestor}")
 print(f"  Contains PHI      : {contains_phi}")
@@ -682,7 +692,6 @@ request_schema = StructType([
     StructField("delete_handling",             StringType(),    True),
     StructField("schema_stability",            StringType(),    True),
     StructField("cdc_method",                  StringType(),    True),
-    StructField("pipeline_name",               StringType(),    True),
     StructField("source_gb",                   DoubleType(),    True),
     StructField("network_source_type",         StringType(),    True),
     StructField("copy_interval",               StringType(),    True),
@@ -702,7 +711,7 @@ request_row = [(
     request_id, datetime.now(timezone.utc),
     business_unit, request_date, requestor, business_justification,
     contains_phi, delete_handling, schema_stability, cdc_method,
-    pipeline_name, float(source_gb), network_source_type,
+    float(source_gb), network_source_type,
     copy_interval, bool(include_egress), float(egress_gb), float(sla_time_hr), vm_type,
     data_distribution, delivery_pattern, partition_key_availability,
     complexity_source_type, transformation_logic, frequency,
@@ -723,7 +732,6 @@ if save_results:
 result_schema = StructType([
     StructField("request_id",                      StringType(),    True),
     StructField("estimation_timestamp",            TimestampType(), True),
-    StructField("pipeline_name",                   StringType(),    True),
     StructField("business_unit",                   StringType(),    True),
     StructField("contains_phi",                    StringType(),    True),
     StructField("source_gb",                       DoubleType(),    True),
@@ -765,7 +773,7 @@ p = effort["phases"]
 
 result_row = [(
     request_id, datetime.now(timezone.utc),
-    pipeline_name, business_unit, contains_phi, float(source_gb),
+    business_unit, contains_phi, float(source_gb),
     vm_type, float(vm_specs["per_node_throughput_gb_hr"]), float(vm_specs["vm_cost_hr"]),
     float(resolved_skew), float(resolved_small_files), float(resolved_partitioning), float(resolved_complexity_factor),
     float(network["total_monthly_cost"]),

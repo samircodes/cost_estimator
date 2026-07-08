@@ -108,29 +108,20 @@ def render_new_ingestion_page() -> None:
 
         # ── Section 2: Source details ─────────────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_i, col_j = st.columns(2, gap="large")
-        with col_i:
-            render_field_intro(9, "Pipeline name", "Please fill a name to identify this new pipeline")
-            pipeline_name = st.text_input(
-                "Pipeline name",
-                placeholder="e.g. Claims Feed — Vendor ABC",
-                label_visibility="collapsed",
-            )
-        with col_j:
-            render_field_intro(10, "Data volume (GB)", "Please fill the expected size of this data source in GB")
-            source_gb = st.number_input(
-                "Data volume (GB)",
-                min_value=0.01,
-                value=1.0,
-                step=0.5,
-                format="%.2f",
-                label_visibility="collapsed",
-            )
+        render_field_intro(9, "Data volume (GB)", "Please fill the expected size of this data source in GB")
+        source_gb = st.number_input(
+            "Data volume (GB)",
+            min_value=0.01,
+            value=1.0,
+            step=0.5,
+            format="%.2f",
+            label_visibility="collapsed",
+        )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_k, col_l = st.columns(2, gap="large")
         with col_k:
-            render_field_intro(11, "SLA (hours)", "Please fill how many hours this data needs to be ready within, after each run starts")
+            render_field_intro(10, "SLA (hours)", "Please fill how many hours this data needs to be ready within, after each run starts")
             sla_time_hr = st.number_input(
                 "SLA (hours)",
                 min_value=0.5,
@@ -140,7 +131,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_l:
-            render_field_intro(12, "Network source type", "Please select how this data connects to Azure")
+            render_field_intro(11, "Network source type", "Please select how this data connects to Azure")
             network_source_type = st.selectbox(
                 "Network source type",
                 options=NETWORK_SOURCE_TYPES,
@@ -153,7 +144,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_m, col_n = st.columns(2, gap="large")
         with col_m:
-            render_field_intro(13, "Load type", "Please select whether this is a full reload each time (Bulk) or only changed records (Incremental)")
+            render_field_intro(12, "Load type", "Please select whether this is a full reload each time (Bulk) or only changed records (Incremental)")
             copy_interval = st.selectbox(
                 "Load type",
                 options=COPY_INTERVALS,
@@ -162,7 +153,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_n:
-            render_field_intro(14, "VM type", "Please select the virtual machine type this pipeline should run on")
+            render_field_intro(13, "VM type", "Please select the virtual machine type this pipeline should run on")
             vm_type = st.selectbox(
                 "VM type",
                 options=VM_TYPES,
@@ -174,7 +165,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_o, col_p = st.columns(2, gap="large")
         with col_o:
-            render_field_intro(15, "Egress", "Please select Yes if this data will be sent to a destination outside Azure, otherwise No")
+            render_field_intro(14, "Egress", "Please select Yes if this data will be sent to a destination outside Azure, otherwise No")
             include_egress_raw = st.selectbox(
                 "Egress",
                 options=YES_NO,
@@ -183,7 +174,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_p:
-            render_field_intro(16, "Egress volume (GB)", "Please fill how much data, in GB, will be sent outside Azure (only if the above is Yes)")
+            render_field_intro(15, "Egress volume (GB)", "Please fill how much data, in GB, will be sent outside Azure (only if the above is Yes)")
             egress_gb = st.number_input(
                 "Egress volume (GB)",
                 min_value=0.0,
@@ -195,7 +186,7 @@ def render_new_ingestion_page() -> None:
 
         # ── Section 4: Data characteristics ──────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(17, "Data distribution", "Please select whether most of this data is spread evenly, or comes mostly from a small number of records, customers, or categories")
+        render_field_intro(16, "Data distribution", "Please select whether most of this data is spread evenly, or comes mostly from a small number of records, customers, or categories")
         data_distribution = st.selectbox(
             "Data distribution",
             options=DATA_DISTRIBUTIONS,
@@ -205,7 +196,7 @@ def render_new_ingestion_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(18, "Delivery pattern", "Please select whether this data typically arrives as one large file, or as many small files or frequent small batches")
+        render_field_intro(17, "Delivery pattern", "Please select whether this data typically arrives as one large file, or as many small files or frequent small batches")
         delivery_pattern = st.selectbox(
             "Delivery pattern",
             options=DELIVERY_PATTERNS,
@@ -215,7 +206,7 @@ def render_new_ingestion_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(19, "Partition key", "Please select whether this data has a clear field like date, region, or account that can be used to split it into smaller groups")
+        render_field_intro(18, "Partition key", "Please select whether this data has a clear field like date, region, or account that can be used to split it into smaller groups")
         partition_key_availability = st.selectbox(
             "Partition key",
             options=PARTITION_KEY_AVAILABILITIES,
@@ -228,7 +219,7 @@ def render_new_ingestion_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_t, col_u, col_v = st.columns(3, gap="large")
         with col_t:
-            render_field_intro(20, "Source complexity", "Please select the type of system this data is coming from")
+            render_field_intro(19, "Source complexity", "Please select the type of system this data is coming from")
             complexity_source_type = st.selectbox(
                 "Source complexity",
                 options=COMPLEXITY_SOURCE_TYPES,
@@ -237,7 +228,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_u:
-            render_field_intro(21, "Transformation logic", "Please select how much transformation or business logic needs to be applied to this data — light, medium, or heavy")
+            render_field_intro(20, "Transformation logic", "Please select how much transformation or business logic needs to be applied to this data — light, medium, or heavy")
             transformation_logic = st.selectbox(
                 "Transformation logic",
                 options=TRANSFORMATION_LOGICS,
@@ -246,7 +237,7 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
         with col_v:
-            render_field_intro(22, "Frequency", "Please select how often this data needs to be refreshed")
+            render_field_intro(21, "Frequency", "Please select how often this data needs to be refreshed")
             frequency = st.selectbox(
                 "Frequency",
                 options=NEW_SOURCE_FREQUENCIES,
@@ -269,7 +260,6 @@ def render_new_ingestion_page() -> None:
                 ("Delete handling", delete_handling),
                 ("Schema stability", schema_stability),
                 ("CDC method", cdc_method),
-                ("Pipeline name", pipeline_name),
                 ("Network source type", network_source_type),
                 ("Load type", copy_interval),
                 ("VM type", vm_type),
@@ -309,7 +299,6 @@ def render_new_ingestion_page() -> None:
                     "delete_handling":             delete_handling,
                     "schema_stability":            schema_stability,
                     "cdc_method":                  cdc_method,
-                    "pipeline_name":               pipeline_name,
                     "source_gb":                   str(source_gb),
                     "network_source_type":         network_source_type,
                     "copy_interval":               copy_interval,

@@ -91,7 +91,7 @@ TYPICAL_WORKERS_BY_METHOD = {
 
 # Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
 VM_RATE_PER_NODE_HR = fetch_vm_price("Standard_DS3_v2", fallback=0.38)
-DBU_PRICE_HR        = 0.07   # Databricks serverless DBU price — not in Azure Retail API
+DBU_PRICE_HR        = 0.30   # Databricks Jobs Compute DBU price — not in Azure Retail API
 
 # Each additional source object (table/file/endpoint) adds overhead:
 # extra schema discovery, checkpoint management, and connection slots.
