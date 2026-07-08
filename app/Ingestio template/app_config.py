@@ -225,17 +225,6 @@ REQUEST_TYPES = (
     ),
     RequestType(
         number="02",
-        category="Existing source",
-        title="Add Data to Existing EDH Sources",
-        description=(
-            "Extend an established source with new files, tables, fields, "
-            "or delivery requirements."
-        ),
-        button_label="Choose an existing source",
-        page=EXISTING_SOURCE_PAGE,
-    ),
-    RequestType(
-        number="03",
         category="Source systems",
         title="Add Data from Source Systems",
         description=(
@@ -244,5 +233,16 @@ REQUEST_TYPES = (
         ),
         button_label="Select a source system",
         page=SOURCE_SYSTEM_PAGE,
+    ),
+    RequestType(
+        number="03",
+        category="Existing source",
+        title="Add Data to Existing EDH Sources",
+        description=(
+            "Extend an established source with new files, tables, fields, "
+            "or delivery requirements."
+        ),
+        button_label="Choose an existing source",
+        page=EXISTING_SOURCE_PAGE,
     ),
 )
