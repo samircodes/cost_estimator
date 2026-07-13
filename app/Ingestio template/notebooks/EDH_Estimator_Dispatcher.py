@@ -1,8 +1,8 @@
 # Databricks notebook source
 # EDH Cost Estimator - DISPATCHER
-# Single entry point for the Ingestio app. Routes to either the
-# existing-source or new-source estimator notebook based on
-# `request_type`, and passes that form's fields through unchanged.
+# Single entry point for the Ingestio app. Routes to the new-source or
+# source-system estimator notebook based on `request_type`, and passes
+# that form's fields through unchanged.
 #
 # WHY A DISPATCHER (not a native If/else condition task):
 # Each form has its own, different parameter set. A dispatcher notebook
@@ -32,7 +32,7 @@
 
 import json
 
-dbutils.widgets.text("request_type", "")   # "existing_source" or "new_source"
+dbutils.widgets.text("request_type", "")   # "new_source" or "source_system"
 dbutils.widgets.text("payload", "{}")      # JSON string: that form's fields, including request_id
 
 request_type = dbutils.widgets.get("request_type")
@@ -60,9 +60,8 @@ current_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
 notebook_dir = current_path.rsplit("/", 1)[0]
 
 NOTEBOOK_PATHS = {
-    "existing_source": f"{notebook_dir}/EDH_Cost_Estimator_Job",
-    "new_source":      f"{notebook_dir}/EDH_New_Source_Estimator_Job",
-    "source_system":   f"{notebook_dir}/EDH_Source_System_Estimator_Job",
+    "new_source":    f"{notebook_dir}/EDH_New_Source_Estimator_Job",
+    "source_system": f"{notebook_dir}/EDH_Source_System_Estimator_Job",
 }
 
 if request_type not in NOTEBOOK_PATHS:
