@@ -3,7 +3,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from app_config import ADMIN_USERS, HOME_PAGE, REQUEST_HISTORY_PAGE, RequestType
+from app_config import HOME_PAGE, REQUEST_HISTORY_PAGE, RequestType
+from databricks_client import fetch_admin_emails
 
 
 STYLES_PATH = Path(__file__).parent / "assets" / "styles.css"
@@ -23,8 +24,14 @@ def current_user_email() -> str:
     return st.context.headers.get("X-Forwarded-Email", "").lower()
 
 
+@st.cache_data(ttl=300)
+def _cached_admin_emails() -> set[str]:
+    return fetch_admin_emails()
+
+
 def is_admin() -> bool:
-    return not ADMIN_USERS or current_user_email() in ADMIN_USERS
+    admin_emails = _cached_admin_emails()
+    return not admin_emails or current_user_email() in admin_emails
 
 
 def render_header() -> None:

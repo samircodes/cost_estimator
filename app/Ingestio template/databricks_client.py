@@ -7,6 +7,7 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
 
 from app_config import (
+    ADMIN_USERS_TABLE,
     COMBINED_ESTIMATIONS_TABLE,
     ESTIMATOR_JOB_ID,
     NEW_SOURCE_ESTIMATIONS_TABLE,
@@ -27,6 +28,17 @@ def _spark() -> DatabricksSession:
 def _run_query(statement: str) -> list[list]:
     rows = _spark().sql(statement).collect()
     return [list(row) for row in rows]
+
+
+def fetch_admin_emails() -> set[str]:
+    """Empty set on an empty table or a failed lookup - callers should treat
+    that the same as "no restriction", matching the old unset-ADMIN_USERS
+    behaviour."""
+    try:
+        rows = _run_query(f"SELECT email FROM {ADMIN_USERS_TABLE}")
+    except Exception:
+        return set()
+    return {row[0].strip().lower() for row in rows if row[0] and row[0].strip()}
 
 
 def trigger_estimator_job(request_type: str, payload: dict) -> int:

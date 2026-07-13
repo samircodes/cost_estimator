@@ -14,20 +14,17 @@ APP_TITLE = "Ryan | Ingestion Requests"
 # Populate after running: databricks bundle deploy
 ESTIMATOR_JOB_ID: int = int(os.environ["ESTIMATOR_JOB_ID"])
 
-# ── Admin access (comma-separated emails allowed to view the dashboard) ───────
-# e.g. ADMIN_USERS="alice@company.com,bob@company.com"
-ADMIN_USERS: set[str] = {
-    email.strip().lower()
-    for email in os.environ.get("ADMIN_USERS", "").split(",")
-    if email.strip()
-}
-
 # ── Delta tables ──────────────────────────────────────────────────────────────
 NEW_SOURCE_REQUESTS_TABLE         = os.environ["NEW_SOURCE_REQUESTS"]
 NEW_SOURCE_ESTIMATIONS_TABLE      = os.environ["NEW_SOURCE_ESTIMATIONS"]
 SOURCE_SYSTEM_REQUESTS_TABLE      = os.environ["SOURCE_SYSTEM_REQUESTS"]
 SOURCE_SYSTEM_ESTIMATIONS_TABLE   = os.environ["SOURCE_SYSTEM_ESTIMATIONS"]
 COMBINED_ESTIMATIONS_TABLE        = os.environ["COMBINED_ESTIMATIONS"]
+
+# ── Admin access (emails allowed to view the dashboard) ───────────────────────
+# Table holds one email per row. Empty table or a failed lookup falls back to
+# allowing everyone, same as the old unset-ADMIN_USERS behaviour.
+ADMIN_USERS_TABLE = os.environ["ADMIN_USERS_TABLE"]
 
 # ── Existing-source form options ──────────────────────────────────────────────
 SOURCE_TYPES = (

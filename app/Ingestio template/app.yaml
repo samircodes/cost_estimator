@@ -23,5 +23,5 @@ env:
     valueFrom: "source_system_requests"
   - name: SOURCE_SYSTEM_ESTIMATIONS
     valueFrom: "source_system_estimations"
-  - name: ADMIN_USERS
-    value: "samirwindz007@gmail.com,prashant@ryansg.com"
+  - name: ADMIN_USERS_TABLE
+    valueFrom: "admin_users_table"
