@@ -11,7 +11,7 @@ from app_pages.home import render_home_page
 from app_pages.new_ingestion import render_new_ingestion_page
 from app_pages.request_history import render_request_history_page
 from app_pages.source_systems import render_source_systems_page
-from ui import apply_theme, render_header
+from ui import apply_theme, render_admin_action, render_header
 
 
 st.set_page_config(
@@ -29,7 +29,9 @@ PAGES = {
 }
 
 apply_theme()
-render_header()
+admin_action_placeholder = render_header()
 
 page = st.session_state.get("page", HOME_PAGE)
 PAGES.get(page, render_home_page)()
+
+render_admin_action(admin_action_placeholder)

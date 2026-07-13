@@ -24,17 +24,18 @@ def current_user_email() -> str:
     return st.context.headers.get("X-Forwarded-Email", "").lower()
 
 
-@st.cache_data(ttl=300)
-def _cached_admin_emails() -> set[str]:
-    return fetch_admin_emails()
-
-
 def is_admin() -> bool:
-    admin_emails = _cached_admin_emails()
+    if "_admin_emails" not in st.session_state:
+        st.session_state["_admin_emails"] = fetch_admin_emails()
+    admin_emails = st.session_state["_admin_emails"]
     return not admin_emails or current_user_email() in admin_emails
 
 
-def render_header() -> None:
+def render_header():
+    """Draws the brand row immediately and returns a placeholder for the
+    admin-only action button. Call render_admin_action() on the result once
+    the rest of the page has rendered, so the admin lookup doesn't block the
+    whole page from appearing."""
     brand_column, action_column = st.columns([2, 1])
 
     with brand_column:
@@ -42,9 +43,15 @@ def render_header() -> None:
         st.markdown('<span class="brand-name">Ryan Specialty</span>', unsafe_allow_html=True)
 
     with action_column:
-        if is_admin():
-            if st.button("Request History & Costs", key="open_request_history"):
-                navigate_to(REQUEST_HISTORY_PAGE)
+        return st.empty()
+
+
+def render_admin_action(placeholder) -> None:
+    if not is_admin():
+        return
+    with placeholder:
+        if st.button("Request History & Costs", key="open_request_history"):
+            navigate_to(REQUEST_HISTORY_PAGE)
 
 
 def render_back_button(key: str) -> None:
