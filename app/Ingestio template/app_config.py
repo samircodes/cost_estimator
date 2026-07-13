@@ -12,7 +12,7 @@ APP_TITLE = "Ryan | Ingestion Requests"
 
 # ── Dispatcher job (handles both existing-source and new-source requests) ─────
 # Populate after running: databricks bundle deploy
-ESTIMATOR_JOB_ID: int = int(os.environ.get("ESTIMATOR_JOB_ID", "843013258339321"))
+ESTIMATOR_JOB_ID: int = int(os.environ["ESTIMATOR_JOB_ID"])
 
 # ── Admin access (comma-separated emails allowed to view the dashboard) ───────
 # e.g. ADMIN_USERS="alice@company.com,bob@company.com"
@@ -23,12 +23,11 @@ ADMIN_USERS: set[str] = {
 }
 
 # ── Delta tables ──────────────────────────────────────────────────────────────
-COST_ESTIMATES_TABLE              = os.environ.get("COST_ESTIMATES_TABLE",              "edh.ingestion.edh_cost_estimations")
-NEW_SOURCE_REQUESTS_TABLE         = os.environ.get("NEW_SOURCE_REQUESTS_TABLE",         "edh.ingestion.edh_newsource_requests")
-NEW_SOURCE_ESTIMATIONS_TABLE      = os.environ.get("NEW_SOURCE_ESTIMATIONS_TABLE",      "edh.ingestion.edh_newsource_estimations")
-SOURCE_SYSTEM_REQUESTS_TABLE      = os.environ.get("SOURCE_SYSTEM_REQUESTS_TABLE",      "edh.ingestion.edh_sourcesystem_requests")
-SOURCE_SYSTEM_ESTIMATIONS_TABLE   = os.environ.get("SOURCE_SYSTEM_ESTIMATIONS_TABLE",   "edh.ingestion.edh_sourcesystem_estimations")
-COMBINED_ESTIMATIONS_TABLE        = os.environ.get("COMBINED_ESTIMATIONS_TABLE",        "edh.ingestion.edh_combined_estimations")
+NEW_SOURCE_REQUESTS_TABLE         = os.environ["NEW_SOURCE_REQUESTS"]
+NEW_SOURCE_ESTIMATIONS_TABLE      = os.environ["NEW_SOURCE_ESTIMATIONS"]
+SOURCE_SYSTEM_REQUESTS_TABLE      = os.environ["SOURCE_SYSTEM_REQUESTS"]
+SOURCE_SYSTEM_ESTIMATIONS_TABLE   = os.environ["SOURCE_SYSTEM_ESTIMATIONS"]
+COMBINED_ESTIMATIONS_TABLE        = os.environ["COMBINED_ESTIMATIONS"]
 
 # ── Existing-source form options ──────────────────────────────────────────────
 SOURCE_TYPES = (

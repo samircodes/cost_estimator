@@ -13,13 +13,15 @@ env:
     valueFrom: "databricks_client_secret"
   - name: ESTIMATOR_JOB_ID
     valueFrom: "estimator_job_id"
-  - name: COMBINED_ESTIMATIONS_TABLE
-    valueFrom: "combined_estimations_table"
-  - name: COST_ESTIMATES_TABLE
-    valueFrom: "cost_estimates_table"
-  - name: NEW_SOURCE_REQUESTS_TABLE
-    valueFrom: "new_source_requests_table"
-  - name: NEW_SOURCE_ESTIMATIONS_TABLE
-    valueFrom: "new_source_estimations_table"
+  - name: COMBINED_ESTIMATIONS
+    valueFrom: "combined_estimations"
+  - name: NEW_SOURCE_REQUESTS
+    valueFrom: "new_source_requests"
+  - name: NEW_SOURCE_ESTIMATIONS
+    valueFrom: "new_source_estimations"
+  - name: SOURCE_SYSTEM_REQUESTS
+    valueFrom: "source_system_requests"
+  - name: SOURCE_SYSTEM_ESTIMATIONS
+    valueFrom: "source_system_estimations"
   - name: ADMIN_USERS
     value: "samirwindz007@gmail.com,prashant@ryansg.com"

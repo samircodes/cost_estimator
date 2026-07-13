@@ -8,7 +8,6 @@ from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
 
 from app_config import (
     COMBINED_ESTIMATIONS_TABLE,
-    COST_ESTIMATES_TABLE,
     ESTIMATOR_JOB_ID,
     NEW_SOURCE_ESTIMATIONS_TABLE,
     NEW_SOURCE_REQUESTS_TABLE,
@@ -103,24 +102,6 @@ def fetch_all_estimates() -> list[dict[str, Any]]:
     return [dict(zip(COMBINED_COLS, row)) for row in rows]
 
 
-EXISTING_SOURCE_DETAIL_COLS = [
-    "request_id",
-    "source_type",
-    "data_format",
-    "additional_gb",
-    "load_type",
-    "ingestion_frequency",
-    "primary_key_available",
-    "delete_handling",
-    "schema_stability",
-    "cdc_method",
-    "contains_phi",
-    "effort_complexity_level",
-    "effort_total_days_min",
-    "effort_total_days_estimate",
-    "effort_total_days_max",
-]
-
 NEW_SOURCE_DETAIL_COLS = [
     "request_id",
     "source_gb",
@@ -181,16 +162,6 @@ def fetch_all_request_details() -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Returns (detail_map, errors). detail_map keyed by request_id."""
     result: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
-
-    try:
-        sel  = ", ".join(EXISTING_SOURCE_DETAIL_COLS)
-        rows = _run_query(f"SELECT {sel} FROM {COST_ESTIMATES_TABLE}")
-        for row in rows:
-            d = dict(zip(EXISTING_SOURCE_DETAIL_COLS, row))
-            d["_source"] = "existing"
-            result[d["request_id"]] = d
-    except Exception as exc:
-        errors.append(f"Could not load existing-source form details ({COST_ESTIMATES_TABLE}): {exc}")
 
     try:
         sel  = ", ".join(NEW_SOURCE_DETAIL_COLS)

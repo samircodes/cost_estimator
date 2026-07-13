@@ -40,7 +40,7 @@ dbutils.widgets.dropdown("save_results",            "true",           ["true", "
 # ============================================================
 
 # Change CATALOG / SCHEMA when promoting to production.
-CATALOG = "edh"
+CATALOG = "dev_ingestion_requests"
 SCHEMA  = "ingestion"
 
 # COMMAND ----------

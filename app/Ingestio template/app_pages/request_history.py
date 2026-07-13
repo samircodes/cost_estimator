@@ -64,26 +64,6 @@ def _effort_badge(level: str) -> str:
     )
 
 
-def _render_existing_details(detail: dict) -> None:
-    st.markdown("##### Source Details")
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(f"**Source Type**  \n{detail.get('source_type') or '—'}")
-    c2.markdown(f"**Data Format**  \n{detail.get('data_format') or '—'}")
-    c3.markdown(f"**Volume**  \n{detail.get('additional_gb') or '—'} GB")
-
-    c4, c5, c6 = st.columns(3)
-    c4.markdown(f"**Load Type**  \n{detail.get('load_type') or '—'}")
-    c5.markdown(f"**Frequency**  \n{detail.get('ingestion_frequency') or '—'}")
-    c6.markdown(f"**CDC Method**  \n{detail.get('cdc_method') or '—'}")
-
-    st.markdown("##### Governance")
-    g1, g2, g3, g4 = st.columns(4)
-    g1.markdown(f"**Primary Key**  \n{detail.get('primary_key_available') or '—'}")
-    g2.markdown(f"**Delete Handling**  \n{detail.get('delete_handling') or '—'}")
-    g3.markdown(f"**Schema Stability**  \n{detail.get('schema_stability') or '—'}")
-    g4.markdown(f"**Contains PHI**  \n{detail.get('contains_phi') or '—'}")
-
-
 def _render_new_source_details(detail: dict) -> None:
     st.markdown("##### Connection")
     c1, c2, c3, c4 = st.columns(4)
@@ -276,9 +256,7 @@ def render_request_history_page() -> None:
                         f"Submitted: {row['estimation_timestamp']}  |  "
                         f"Contains PHI: {row['contains_phi'] or '—'}"
                     )
-                    if detail["_source"] == "existing":
-                        _render_existing_details(detail)
-                    elif detail["_source"] == "source_system":
+                    if detail["_source"] == "source_system":
                         _render_source_system_details(detail)
                     else:
                         _render_new_source_details(detail)
