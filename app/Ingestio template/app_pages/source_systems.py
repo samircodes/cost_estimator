@@ -11,6 +11,7 @@ from app_config import (
     INGESTION_SOURCE_MAP,
     PRIMARY_KEY_OPTIONS,
     SCHEMA_STABILITY_OPTIONS,
+    VM_TYPES,
 )
 from databricks_client import trigger_estimator_job
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
@@ -18,6 +19,17 @@ from ui import render_back_button, render_field_intro, render_form_heading, rend
 YES_NO = ("Yes", "No")
 LOAD_TYPES = ("Bulk", "Incremental")
 INGESTION_METHODS = tuple(INGESTION_SOURCE_MAP.keys())
+
+# Source System is a business-facing intake, so the more technical fields offer
+# a "Not sure" escape hatch. The estimator resolves each to a sensible default
+# (VM -> DS3, SLA -> derived from frequency, and moderate effort contingencies
+# for CDC / delete handling / primary key). "Not sure" is only added here, not
+# to the shared app_config tuples, so the New Source form is unaffected.
+NOT_SURE = "Not sure"
+VM_TYPE_CHOICES         = VM_TYPES + (NOT_SURE,)
+PRIMARY_KEY_CHOICES     = PRIMARY_KEY_OPTIONS + (NOT_SURE,)
+DELETE_HANDLING_CHOICES = DELETE_HANDLING_OPTIONS + (NOT_SURE,)
+CDC_METHOD_CHOICES      = CDC_METHOD_OPTIONS + (NOT_SURE,)
 
 ALL_DATA_STRUCTURES = (
     "Sql Server", "Sybase", "Postgres", "csv", "parquet", "xlsb", "xls", "API", "Other",
@@ -36,7 +48,7 @@ def render_source_systems_page() -> None:
         "source system, and the objects you need.",
     )
 
-    render_form_heading("Source Systems Request", 14)
+    render_form_heading("Source Systems Request", 16)
 
     # ── Cascade: Ingestion Method → Source System → Data Structure ────────────
     # These sit outside the form so they react to each other immediately.
@@ -181,31 +193,57 @@ def render_source_systems_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(9, "Load type", "Please select whether this is a full reload (Bulk) or only changed records (Incremental)")
-        load_type = st.radio(
-            "Load type",
-            options=LOAD_TYPES,
-            horizontal=True,
-            label_visibility="collapsed",
-        )
+        col_sla, col_lt = st.columns(2, gap="large")
+        with col_sla:
+            render_field_intro(9, "SLA (hours)", "How many hours this data needs to be ready within, after each run starts. Only fill this in if you have a real deadline — otherwise tick the box and we'll size a standard cluster and tell you how long it takes.")
+            sla_not_sure = st.checkbox("No deadline / not sure", key="ss_sla_not_sure")
+            sla_time_hr = st.number_input(
+                "SLA (hours)",
+                min_value=0.5,
+                value=2.0,
+                step=0.5,
+                format="%.1f",
+                label_visibility="collapsed",
+                disabled=sla_not_sure,
+            )
+        with col_lt:
+            render_field_intro(10, "Load type", "Please select whether this is a full reload (Bulk) or only changed records (Incremental)")
+            load_type = st.radio(
+                "Load type",
+                options=LOAD_TYPES,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        col_vm, _col_spacer = st.columns(2, gap="large")
+        with col_vm:
+            render_field_intro(11, "VM type", "The virtual machine type this pipeline runs on. Choose 'Not sure' and we'll use a sensible default.")
+            vm_type = st.selectbox(
+                "VM type",
+                options=VM_TYPE_CHOICES,
+                index=None,
+                placeholder="Select VM type",
+                label_visibility="collapsed",
+            )
 
         # Section: Governance
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_g, col_h = st.columns(2, gap="large")
         with col_g:
-            render_field_intro(10, "Primary key available", "Please select whether this source has a unique identifier per record")
+            render_field_intro(12, "Primary key available", "Whether this source has a unique identifier per record. Choose 'Not sure' if you don't know.")
             primary_key_available = st.selectbox(
                 "Primary key available",
-                options=PRIMARY_KEY_OPTIONS,
+                options=PRIMARY_KEY_CHOICES,
                 index=None,
                 placeholder="Select",
                 label_visibility="collapsed",
             )
         with col_h:
-            render_field_intro(11, "Delete handling", "Please select how deleted records should be handled")
+            render_field_intro(13, "Delete handling", "How deleted records should be handled. Choose 'Not sure' if you don't know.")
             delete_handling = st.selectbox(
                 "Delete handling",
-                options=DELETE_HANDLING_OPTIONS,
+                options=DELETE_HANDLING_CHOICES,
                 index=None,
                 placeholder="Select",
                 label_visibility="collapsed",
@@ -214,7 +252,7 @@ def render_source_systems_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_i, col_j = st.columns(2, gap="large")
         with col_i:
-            render_field_intro(12, "Schema stability", "Please select how often you expect the structure of this data to change")
+            render_field_intro(14, "Schema stability", "Please select how often you expect the structure of this data to change")
             schema_stability = st.selectbox(
                 "Schema stability",
                 options=SCHEMA_STABILITY_OPTIONS,
@@ -223,17 +261,17 @@ def render_source_systems_page() -> None:
                 label_visibility="collapsed",
             )
         with col_j:
-            render_field_intro(13, "CDC method", "Please select how changes will be tracked for this source")
+            render_field_intro(15, "CDC method", "How changes will be tracked for this source. Choose 'Not sure' if you don't know.")
             cdc_method = st.selectbox(
                 "CDC method",
-                options=CDC_METHOD_OPTIONS,
+                options=CDC_METHOD_CHOICES,
                 index=None,
                 placeholder="Select",
                 label_visibility="collapsed",
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(14, "Contains PHI", "Please select Yes if this data includes Protected Health Information")
+        render_field_intro(16, "Contains PHI", "Please select Yes if this data includes Protected Health Information")
         contains_phi = st.radio(
             "Contains PHI",
             options=YES_NO,
@@ -280,18 +318,22 @@ def render_source_systems_page() -> None:
                 ("Delete handling",     delete_handling),
                 ("Schema stability",    schema_stability),
                 ("CDC method",          cdc_method),
+                ("VM type",             vm_type),
             ] if not val
         ]
         if missing:
             st.error(f"Please fill in: {', '.join(missing)}")
             return
 
-        if load_type == "Incremental" and cdc_method == "Not Applicable":
-            st.error("CDC Method cannot be 'Not Applicable' when Load Type is Incremental.")
-            return
-        if load_type == "Bulk" and cdc_method != "Not Applicable":
-            st.error("CDC Method should be 'Not Applicable' when Load Type is Bulk.")
-            return
+        # The Load Type / CDC coupling only applies to concrete CDC answers —
+        # "Not sure" is always allowed (the estimator assumes a moderate default).
+        if cdc_method != NOT_SURE:
+            if load_type == "Incremental" and cdc_method == "Not Applicable":
+                st.error("CDC Method cannot be 'Not Applicable' when Load Type is Incremental. Choose a method or 'Not sure'.")
+                return
+            if load_type == "Bulk" and cdc_method not in ("Not Applicable",):
+                st.error("CDC Method should be 'Not Applicable' when Load Type is Bulk. Choose 'Not Applicable' or 'Not sure'.")
+                return
 
         request_id = str(uuid.uuid4())
         source_objects = valid_rows["Source Object"].str.strip().tolist()
@@ -312,12 +354,14 @@ def render_source_systems_page() -> None:
                     "source_objects":         ",".join(source_objects),
                     "edh_table_names":        ",".join(edh_table_names),
                     "additional_gb":          str(additional_gb),
+                    "sla_time_hr":            "Not sure" if sla_not_sure else str(sla_time_hr),
                     "ingestion_frequency":    ingestion_frequency,
                     "load_type":              load_type,
                     "primary_key_available":  primary_key_available,
                     "delete_handling":        delete_handling,
                     "schema_stability":       schema_stability,
                     "cdc_method":             cdc_method,
+                    "vm_type":                vm_type,
                     "contains_phi":           contains_phi,
                     "save_results":           "true",
                 },

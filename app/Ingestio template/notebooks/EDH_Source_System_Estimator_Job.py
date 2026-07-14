@@ -25,12 +25,14 @@ dbutils.widgets.text(    "data_structure",          "")
 dbutils.widgets.text(    "source_objects",          "")   # comma-separated list
 dbutils.widgets.text(    "edh_table_names",         "")   # comma-separated list
 dbutils.widgets.text(    "additional_gb",           "10")
+dbutils.widgets.text(    "sla_time_hr",             "2")   # a number, or "Not sure"
 dbutils.widgets.dropdown("ingestion_frequency",     "Daily",          ["Hourly", "Daily", "Weekly", "Monthly"])
 dbutils.widgets.dropdown("load_type",               "Bulk",           ["Bulk", "Incremental"])
-dbutils.widgets.dropdown("primary_key_available",   "Yes",            ["Yes", "No"])
-dbutils.widgets.dropdown("delete_handling",         "Soft",           ["Hard", "Soft", "Ignore"])
+dbutils.widgets.dropdown("primary_key_available",   "Yes",            ["Yes", "No", "Not sure"])
+dbutils.widgets.dropdown("delete_handling",         "Soft",           ["Hard", "Soft", "Ignore", "Not sure"])
 dbutils.widgets.dropdown("schema_stability",        "Stable",         ["Stable", "Occasionally Changes", "Highly Dynamic"])
-dbutils.widgets.dropdown("cdc_method",              "Not Applicable", ["Not Applicable", "Timestamp", "Log Based"])
+dbutils.widgets.dropdown("cdc_method",              "Not Applicable", ["Not Applicable", "Timestamp", "Log Based", "Not sure"])
+dbutils.widgets.dropdown("vm_type",                 "Standard_DS3_v2", ["Standard_DS3_v2", "Standard_DS5_v2", "Not sure"])
 dbutils.widgets.dropdown("save_results",            "true",           ["true", "false"])
 
 # COMMAND ----------
@@ -80,17 +82,26 @@ THROUGHPUT_BY_STRUCTURE = {
     "API":         4.0,   # Rate-limited by API provider
 }
 
-# Typical number of worker nodes by ingestion method.
-# These are non-integer because they represent averages across
-# different cluster auto-scaling behaviours.
-TYPICAL_WORKERS_BY_METHOD = {
-    "Operational Database": 2.5,
-    "File System":          1.8,
-    "API Endpoint System":  1.2,
-}
+# Worker nodes are sized to meet the requested SLA (see Section 5), not fixed
+# per ingestion method. One driver node is always added on top.
+DRIVER_NODES = 1
 
-# Fetched live from Azure Retail Prices API; falls back to hardcoded if unavailable.
-VM_RATE_PER_NODE_HR = fetch_vm_price("Standard_DS3_v2", fallback=0.38)
+# VM specs by type. rate_hr is fetched live from the Azure Retail Prices API
+# (fallback = current eastus Linux on-demand price). throughput_multiplier
+# scales per-node ingestion throughput relative to DS3: a larger VM has
+# proportionally more vCPUs, so it ingests faster. This makes vm_type affect
+# runtime — and therefore cost — rather than only the hourly rate. (DS3 = 4
+# vCPU baseline; DS5 = 16 vCPU ≈ 4x parallelism.)
+VM_SPECS = {
+    "Standard_DS3_v2": {
+        "rate_hr":               fetch_vm_price("Standard_DS3_v2", fallback=0.293),
+        "throughput_multiplier": 1.0,
+    },
+    "Standard_DS5_v2": {
+        "rate_hr":               fetch_vm_price("Standard_DS5_v2", fallback=1.17),
+        "throughput_multiplier": 4.0,
+    },
+}
 DBU_PRICE_HR        = 0.30   # Databricks Jobs Compute DBU price — not in Azure Retail API
 
 # Each additional source object (table/file/endpoint) adds overhead:
@@ -111,6 +122,30 @@ RUNS_PER_MONTH = {
     "Weekly":    4,
     "Monthly":   1,
 }
+
+# Fixed per-run overhead: cluster spin-up plus job coordination. This does NOT
+# shrink as workers are added, which is what stops "scale out wider" from being
+# a free speed-up. Without it, runtime = work/workers implies perfect linear
+# scaling, so more workers would always look cheaper (the driver gets amortised
+# over more useful nodes) and a tight SLA would look free. With it, a very wide
+# cluster pays this overhead on every node, so cost is U-shaped in worker count:
+# too few workers wastes the driver, too many wastes startup.
+CLUSTER_STARTUP_HR = 0.1
+
+# When no SLA is given, the cluster is sized from the work itself rather than
+# from an invented deadline: roughly this much data per worker. This is a real,
+# tunable engineering parameter, and unlike bucketed SLA defaults it is
+# monotonic - more data never produces fewer workers.
+TARGET_GB_PER_WORKER = 50.0
+
+# Upper bound on workers. Also what makes meets_sla a genuine feasibility check:
+# if even MAX_WORKERS cannot hit the requested SLA, meets_sla comes back False.
+MAX_WORKERS = 20
+
+# VM assumed when the requester answers "Not sure" for VM type. DS3 is the
+# baseline 4-vCPU unit; because workers are sized to the SLA, the smaller unit
+# just means finer-grained, cheaper scaling.
+DEFAULT_VM_TYPE = "Standard_DS3_v2"
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +204,7 @@ CDC_COMPLEXITY = {
     "Not Applicable": 0.0,
     "Timestamp":      1.0,
     "Log Based":      2.0,   # Requires log reader setup and maintenance
+    "Not sure":       1.0,   # Moderate contingency (assume Timestamp-level effort)
 }
 
 SCHEMA_STABILITY_COMPLEXITY = {
@@ -178,9 +214,10 @@ SCHEMA_STABILITY_COMPLEXITY = {
 }
 
 DELETE_COMPLEXITY = {
-    "Ignore": 0.0,
-    "Soft":   0.5,   # Flag column + filter logic
-    "Hard":   1.0,   # Merge/delete logic required
+    "Ignore":   0.0,
+    "Soft":     0.5,   # Flag column + filter logic
+    "Hard":     1.0,   # Merge/delete logic required
+    "Not sure": 0.5,   # Moderate contingency (assume Soft-level effort)
 }
 
 LOAD_TYPE_COMPLEXITY = {
@@ -189,8 +226,9 @@ LOAD_TYPE_COMPLEXITY = {
 }
 
 PRIMARY_KEY_COMPLEXITY = {
-    "Yes": 0.0,
-    "No":  0.5,   # No PK means deduplication logic needed
+    "Yes":      0.0,
+    "No":       0.5,    # No PK means deduplication logic needed
+    "Not sure": 0.25,   # Small contingency between Yes and No
 }
 
 # Complexity thresholds for bucketing into Simple / Medium / Complex.
@@ -253,13 +291,35 @@ data_structure         = dbutils.widgets.get("data_structure")
 source_objects_raw     = dbutils.widgets.get("source_objects")
 edh_table_names_raw    = dbutils.widgets.get("edh_table_names")
 additional_gb          = float(dbutils.widgets.get("additional_gb"))
+sla_raw                = dbutils.widgets.get("sla_time_hr")
 ingestion_frequency    = dbutils.widgets.get("ingestion_frequency")
 load_type              = dbutils.widgets.get("load_type")
 primary_key_available  = dbutils.widgets.get("primary_key_available")
 delete_handling        = dbutils.widgets.get("delete_handling")
 schema_stability       = dbutils.widgets.get("schema_stability")
 cdc_method             = dbutils.widgets.get("cdc_method")
+vm_type                = dbutils.widgets.get("vm_type")
 save_results           = dbutils.widgets.get("save_results").lower() == "true"
+
+# ── Resolve "Not sure" answers to concrete engineering assumptions ────────────
+# The raw request keeps the requester's answer (incl. "Not sure"); these
+# *_effective values are what the cost/effort math actually uses. Effort-only
+# fields (cdc/delete/primary key) carry their own "Not sure" complexity entry,
+# so they need no resolution here.
+vm_type_effective = DEFAULT_VM_TYPE if vm_type == "Not sure" else vm_type
+
+# The SLA is a genuine, optional constraint - not something we invent on the
+# requester's behalf. "Not sure" means no deadline was given, so we size a
+# standard cluster from the work (TARGET_GB_PER_WORKER) and report the runtime
+# as an output. sla_time_hr / meets_sla stay null in that case: no deadline was
+# promised, so no feasibility claim is made.
+sla_specified = str(sla_raw).strip().lower() != "not sure"
+sla_time_hr   = float(sla_raw) if sla_specified else None
+
+if vm_type_effective not in VM_SPECS:
+    raise ValueError(f"Invalid vm_type. Choose from: {list(VM_SPECS.keys()) + ['Not sure']}")
+if sla_specified and sla_time_hr <= 0:
+    raise ValueError("sla_time_hr must be greater than 0")
 
 source_objects_list  = [s.strip() for s in source_objects_raw.split(",")  if s.strip()]
 edh_table_names_list = [s.strip() for s in edh_table_names_raw.split(",") if s.strip()]
@@ -274,6 +334,7 @@ print(f"additional_gb:      {additional_gb}")
 print(f"ingestion_frequency:{ingestion_frequency}")
 print(f"load_type:          {load_type}")
 print(f"cdc_method:         {cdc_method}")
+print(f"vm_type:            {vm_type}")
 
 # COMMAND ----------
 
@@ -281,18 +342,50 @@ print(f"cdc_method:         {cdc_method}")
 # SECTION 5: COMPUTE COST
 # ============================================================
 
+import math
+
 runs_per_month   = RUNS_PER_MONTH[ingestion_frequency]
 load_factor      = LOAD_TYPE_FACTOR[load_type]
-typical_workers  = TYPICAL_WORKERS_BY_METHOD[ingestion_method]
-ingestion_nodes  = int(1 + typical_workers)
-throughput       = THROUGHPUT_BY_STRUCTURE.get(data_structure, 15.0)
+base_throughput  = THROUGHPUT_BY_STRUCTURE.get(data_structure, 15.0)
 ingestion_dbu_hr = INGESTION_DBU_BY_METHOD[ingestion_method]
+
+VM_RATE_PER_NODE_HR      = VM_SPECS[vm_type_effective]["rate_hr"]
+vm_throughput_multiplier = VM_SPECS[vm_type_effective]["throughput_multiplier"]
+
+# Per-node throughput scales with VM size: a bigger VM ingests faster, so a
+# larger vm_type reduces runtime (and thus compute-hours) rather than only
+# raising the hourly rate.
+throughput = base_throughput * vm_throughput_multiplier
 
 # Effective volume processed per run (bulk = full, incremental = fraction)
 effective_gb_per_run = additional_gb * load_factor
 
-# Hours per run based on data volume and cluster throughput
-runtime_hrs = effective_gb_per_run / (throughput * typical_workers)
+# ── Cluster sizing ────────────────────────────────────────────────────────────
+# With an SLA: size workers so a run fits the deadline, remembering that
+# CLUSTER_STARTUP_HR of it is fixed overhead, so only the remainder is usable
+# for actual processing. Capped at MAX_WORKERS - if the cap still can't hit the
+# deadline, meets_sla comes back False (a real feasibility check).
+# Without an SLA: size a standard cluster straight from the work.
+if sla_specified:
+    usable_hr = sla_time_hr - CLUSTER_STARTUP_HR
+    if usable_hr <= 0:
+        # Deadline is shorter than cluster startup - unachievable at any width.
+        worker_nodes_estimated = MAX_WORKERS
+    else:
+        worker_nodes_raw = effective_gb_per_run / (usable_hr * throughput)
+        worker_nodes_estimated = max(1, min(MAX_WORKERS, math.ceil(worker_nodes_raw)))
+else:
+    worker_nodes_estimated = max(
+        1, min(MAX_WORKERS, math.ceil(effective_gb_per_run / TARGET_GB_PER_WORKER))
+    )
+
+ingestion_nodes = worker_nodes_estimated + DRIVER_NODES
+
+# Hours per run: fixed startup overhead plus the parallelised processing time.
+runtime_hrs = CLUSTER_STARTUP_HR + effective_gb_per_run / (worker_nodes_estimated * throughput)
+
+# Only a request that actually stated a deadline gets a feasibility verdict.
+meets_sla = (runtime_hrs <= sla_time_hr) if sla_specified else None
 
 # Additional objects multiply compute: first object is base,
 # each extra object adds OBJECT_OVERHEAD_FACTOR of that base.
@@ -305,11 +398,16 @@ transformation_cost = TRANSFORMATION_DBU_HR * ingestion_nodes * runtime_hrs * ru
 compute_cost        = total_dbu_cost + total_vm_cost
 
 print(f"\n── Compute ──────────────────────────────")
-print(f"  typical_workers:      {typical_workers}")
+print(f"  vm_type:              {vm_type} -> {vm_type_effective}  (${VM_RATE_PER_NODE_HR}/hr)")
+_sla_label = f"{sla_time_hr} hr" if sla_specified else "not specified (standard cluster)"
+_sla_verdict = ("meets SLA: YES" if meets_sla else "meets SLA: NO") if sla_specified else "no SLA requested"
+print(f"  sla:                  {_sla_label}")
+print(f"  worker_nodes:         {worker_nodes_estimated}  (+{DRIVER_NODES} driver)")
 print(f"  ingestion_nodes:      {ingestion_nodes}")
 print(f"  throughput (GB/hr):   {throughput}")
 print(f"  effective_gb/run:     {effective_gb_per_run:.4f}")
-print(f"  runtime_hrs/run:      {runtime_hrs:.4f}")
+print(f"  startup_overhead_hr:  {CLUSTER_STARTUP_HR}")
+print(f"  runtime_hrs/run:      {runtime_hrs:.4f}  ({_sla_verdict})")
 print(f"  runs/month:           {runs_per_month}")
 print(f"  object_multiplier:    {object_multiplier:.2f}")
 print(f"  compute_cost/mo:      ${compute_cost:.4f}")
@@ -430,7 +528,7 @@ print(f"  range:                {total_effort_min:.1f} – {total_effort_max:.1f
 
 from datetime import datetime, timezone
 from pyspark.sql.types import (
-    StructType, StructField, StringType, DoubleType, IntegerType, TimestampType,
+    StructType, StructField, StringType, DoubleType, IntegerType, BooleanType, TimestampType,
 )
 
 request_schema = StructType([
@@ -448,12 +546,14 @@ request_schema = StructType([
     StructField("edh_table_names",        StringType(),    True),
     StructField("n_objects",              IntegerType(),   True),
     StructField("additional_gb",          DoubleType(),    True),
+    StructField("sla_time_hr",            DoubleType(),    True),
     StructField("ingestion_frequency",    StringType(),    True),
     StructField("load_type",              StringType(),    True),
     StructField("primary_key_available",  StringType(),    True),
     StructField("delete_handling",        StringType(),    True),
     StructField("schema_stability",       StringType(),    True),
     StructField("cdc_method",             StringType(),    True),
+    StructField("vm_type",                StringType(),    True),
 ])
 
 request_row = [(
@@ -471,12 +571,14 @@ request_row = [(
     edh_table_names_raw,
     n_objects,
     additional_gb,
+    sla_time_hr,
     ingestion_frequency,
     load_type,
     primary_key_available,
     delete_handling,
     schema_stability,
     cdc_method,
+    vm_type,
 )]
 
 if save_results:
@@ -504,12 +606,15 @@ estimation_schema = StructType([
     StructField("additional_gb",              DoubleType(),    True),
     StructField("ingestion_frequency",        StringType(),    True),
     StructField("load_type",                  StringType(),    True),
+    StructField("sla_time_hr",                DoubleType(),    True),
     StructField("runs_per_month",             IntegerType(),   True),
     StructField("load_factor",                DoubleType(),    True),
-    StructField("typical_workers",            DoubleType(),    True),
+    StructField("vm_type",                    StringType(),    True),
+    StructField("worker_nodes_estimated",     IntegerType(),   True),
     StructField("ingestion_nodes",            IntegerType(),   True),
     StructField("throughput_gb_hr",           DoubleType(),    True),
     StructField("runtime_hrs",                DoubleType(),    True),
+    StructField("meets_sla",                  BooleanType(),   True),
     StructField("object_multiplier",          DoubleType(),    True),
     StructField("ingestion_dbu_hr",           DoubleType(),    True),
     StructField("transformation_dbu_hr",      DoubleType(),    True),
@@ -550,14 +655,17 @@ estimation_row = [(
     data_structure,
     n_objects,
     additional_gb,
+    sla_time_hr,
     ingestion_frequency,
     load_type,
     runs_per_month,
     load_factor,
-    typical_workers,
+    vm_type_effective,
+    worker_nodes_estimated,
     ingestion_nodes,
     throughput,
     runtime_hrs,
+    meets_sla,
     object_multiplier,
     ingestion_dbu_hr,
     TRANSFORMATION_DBU_HR,

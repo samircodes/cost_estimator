@@ -16,12 +16,15 @@
 
 # COMMAND ----------
 
+import os
+
 import requests as _rq
 
 # ── Region configuration ──────────────────────────────────────────────────────
-# Update to match your Databricks workspace's Azure region.
+# Sourced from the AZURE_REGION env var so it can be set per workspace/environment
+# without editing code; defaults to "eastus" when unset.
 # Common values: "eastus", "eastus2", "westeurope", "uksouth"
-AZURE_REGION = "eastus"
+AZURE_REGION = os.environ.get("AZURE_REGION", "eastus")
 
 _PRICING_API = "https://prices.azure.com/api/retail/prices"
 

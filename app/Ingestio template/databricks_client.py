@@ -152,12 +152,14 @@ SOURCE_SYSTEM_DETAIL_COLS = [
     "edh_table_names",
     "n_objects",
     "additional_gb",
+    "sla_time_hr",
     "ingestion_frequency",
     "load_type",
     "primary_key_available",
     "delete_handling",
     "schema_stability",
     "cdc_method",
+    "vm_type",
     "contains_phi",
 ]
 
