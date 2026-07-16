@@ -168,6 +168,8 @@ SOURCE_SYSTEM_DETAIL_COLS = [
     "sla_time_hr",
     "ingestion_frequency",
     "load_type",
+    "bulk_table_count",
+    "incremental_table_count",
     "primary_key_available",
     "delete_handling",
     "schema_stability",

@@ -14,9 +14,10 @@ SOURCE_SYSTEM_REQUEST = [
     ("contains_phi", "str"), ("ingestion_method", "str"), ("source_system", "str"),
     ("data_structure", "str"), ("source_objects", "str"), ("edh_table_names", "str"),
     ("n_objects", "int"), ("additional_gb", "double"), ("sla_time_hr", "double"),
-    ("ingestion_frequency", "str"), ("load_type", "str"), ("primary_key_available", "str"),
-    ("delete_handling", "str"), ("schema_stability", "str"), ("cdc_method", "str"),
-    ("vm_type", "str"),
+    ("ingestion_frequency", "str"), ("load_type", "str"),
+    ("bulk_table_count", "int"), ("incremental_table_count", "int"),
+    ("primary_key_available", "str"), ("delete_handling", "str"), ("schema_stability", "str"),
+    ("cdc_method", "str"), ("vm_type", "str"),
 ]
 
 SOURCE_SYSTEM_ESTIMATION = [

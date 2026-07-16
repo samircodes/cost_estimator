@@ -212,6 +212,55 @@ class NotSureDefaults(unittest.TestCase):
         self.assertIsNone(ns["meets_sla"])
 
 
+class MixLoadType(unittest.TestCase):
+
+    def _mix(self, n_bulk, n_incr, **extra):
+        objs = ",".join(f"t{i}" for i in range(n_bulk + n_incr))
+        return run(load_type="Mix", bulk_table_count=str(n_bulk), incremental_table_count=str(n_incr),
+                   source_objects=objs, edh_table_names=objs, cdc_method="Timestamp", **extra)
+
+    def test_mix_blends_load_factor(self):
+        # 2 bulk + 2 incremental -> (2*1.0 + 2*0.15)/4 = 0.575.
+        ns = self._mix(2, 2)
+        self.assertAlmostEqual(ns["load_factor"], 0.575, places=6)
+
+    def test_mix_cost_between_bulk_and_incremental(self):
+        bulk = run(load_type="Bulk", cdc_method="Not Applicable")["total_monthly_cost"]
+        incr = run(load_type="Incremental", cdc_method="Timestamp")["total_monthly_cost"]
+        mix = self._mix(2, 2)["total_monthly_cost"]
+        self.assertLess(incr, mix)
+        self.assertLess(mix, bulk)
+
+    def test_all_bulk_mix_matches_bulk_factor(self):
+        self.assertAlmostEqual(self._mix(4, 0)["load_factor"], 1.0, places=6)
+
+    def test_mix_stores_counts(self):
+        payload = dict(BASE)
+        payload.update(load_type="Mix", bulk_table_count="3", incremental_table_count="1",
+                       source_objects="a,b,c,d", edh_table_names="a,b,c,d", cdc_method="Timestamp")
+        req = ss.estimate(payload, prices=PRICES)["request"]
+        self.assertEqual(req["bulk_table_count"], 3)
+        self.assertEqual(req["incremental_table_count"], 1)
+
+    def test_mix_is_more_complex_than_pure_loads(self):
+        bulk = run(load_type="Bulk", cdc_method="Not Applicable")["complexity_score"]
+        mix = self._mix(2, 2)["complexity_score"]
+        self.assertGreater(mix, bulk)
+
+    def test_mix_zero_counts_raise(self):
+        with self.assertRaises(ValueError):
+            run(load_type="Mix", bulk_table_count="0", incremental_table_count="0",
+                cdc_method="Timestamp")
+
+
+class CustomLogicCdc(unittest.TestCase):
+
+    def test_custom_logic_is_most_complex_cdc(self):
+        log_based = run(load_type="Incremental", cdc_method="Log Based")["complexity_score"]
+        custom = run(load_type="Incremental", cdc_method="Custom Logic")["complexity_score"]
+        self.assertGreater(custom, log_based)
+
+
 class EffortBucketing(unittest.TestCase):
 
     def test_simple_request_is_simple(self):

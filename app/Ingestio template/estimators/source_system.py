@@ -26,7 +26,13 @@ THROUGHPUT_BY_STRUCTURE = {
 DRIVER_NODES = 1
 DBU_PRICE_HR = 0.30
 OBJECT_OVERHEAD_FACTOR = 0.15
-LOAD_TYPE_FACTOR = {"Bulk": 1.0, "Incremental": 0.15}
+
+# Fraction of total volume processed per run, by load type. "Mix" has no fixed
+# factor: it's a per-request blend of the Bulk and Incremental factors weighted
+# by how many tables use each (see estimate()).
+BULK_LOAD_FACTOR = 1.0
+INCREMENTAL_LOAD_FACTOR = 0.15
+LOAD_TYPE_FACTOR = {"Bulk": BULK_LOAD_FACTOR, "Incremental": INCREMENTAL_LOAD_FACTOR}
 RUNS_PER_MONTH = {"Hourly": 730, "Daily": 30, "Weekly": 4, "Monthly": 1}
 
 # Cluster sizing (see the validation notes in the notebook for the rationale).
@@ -58,10 +64,17 @@ DATA_STRUCTURE_COMPLEXITY = {
     "Sql Server": 1.5, "Sybase": 2.0, "Postgres": 1.0, "csv": 0.5,
     "parquet": 0.5, "xlsb": 1.5, "xls": 1.5, "API": 1.5,
 }
-CDC_COMPLEXITY = {"Not Applicable": 0.0, "Timestamp": 1.0, "Log Based": 2.0, "Not sure": 1.0}
+CDC_COMPLEXITY = {
+    "Not Applicable": 0.0, "Timestamp": 1.0, "Log Based": 2.0,
+    "Custom Logic": 2.5,   # Bespoke change-detection logic — the most involved
+    "Not sure": 1.0,
+}
 SCHEMA_STABILITY_COMPLEXITY = {"Stable": 0.0, "Occasionally Changes": 0.75, "Highly Dynamic": 1.5}
 DELETE_COMPLEXITY = {"Ignore": 0.0, "Soft": 0.5, "Hard": 1.0, "Not sure": 0.5}
-LOAD_TYPE_COMPLEXITY = {"Bulk": 0.0, "Incremental": 1.0}
+LOAD_TYPE_COMPLEXITY = {
+    "Bulk": 0.0, "Incremental": 1.0,
+    "Mix": 1.5,   # Both full-reload and change-detection paths to build
+}
 PRIMARY_KEY_COMPLEXITY = {"Yes": 0.0, "No": 0.5, "Not sure": 0.25}
 
 COMPLEXITY_THRESHOLD_SIMPLE = 5.0
@@ -119,6 +132,16 @@ def estimate(payload, prices=None):
     cdc_method             = payload.get("cdc_method", "Not Applicable")
     vm_type                = payload.get("vm_type", "Not sure")
 
+    # "Mix" splits the objects into full-reload and incremental tables.
+    bulk_table_count        = None
+    incremental_table_count = None
+    if load_type == "Mix":
+        bulk_table_count        = int(payload.get("bulk_table_count", 0) or 0)
+        incremental_table_count = int(payload.get("incremental_table_count", 0) or 0)
+        if bulk_table_count < 0 or incremental_table_count < 0 \
+                or (bulk_table_count + incremental_table_count) <= 0:
+            raise ValueError("Mix load type requires non-negative bulk/incremental table counts summing to > 0")
+
     # ── Resolve "Not sure" ─────────────────────────────────────────────────────
     vm_type_effective = DEFAULT_VM_TYPE if vm_type == "Not sure" else vm_type
     if vm_type_effective not in VM_THROUGHPUT_MULTIPLIER:
@@ -134,7 +157,15 @@ def estimate(payload, prices=None):
 
     # ── Compute cost ───────────────────────────────────────────────────────────
     runs_per_month   = RUNS_PER_MONTH[ingestion_frequency]
-    load_factor      = LOAD_TYPE_FACTOR[load_type]
+    if load_type == "Mix":
+        # Blend the bulk/incremental factors by how many tables use each,
+        # assuming volume is spread evenly across tables. This blended factor
+        # drives volume-per-run and networking exactly like a pure load type.
+        total_tables = bulk_table_count + incremental_table_count
+        load_factor = (bulk_table_count * BULK_LOAD_FACTOR
+                       + incremental_table_count * INCREMENTAL_LOAD_FACTOR) / total_tables
+    else:
+        load_factor = LOAD_TYPE_FACTOR[load_type]
     base_throughput  = THROUGHPUT_BY_STRUCTURE.get(data_structure, 15.0)
     ingestion_dbu_hr = INGESTION_DBU_BY_METHOD[ingestion_method]
 
@@ -241,6 +272,7 @@ def estimate(payload, prices=None):
         "source_objects": source_objects_raw, "edh_table_names": edh_table_names_raw,
         "n_objects": n_objects, "additional_gb": additional_gb, "sla_time_hr": sla_time_hr,
         "ingestion_frequency": ingestion_frequency, "load_type": load_type,
+        "bulk_table_count": bulk_table_count, "incremental_table_count": incremental_table_count,
         "primary_key_available": primary_key_available, "delete_handling": delete_handling,
         "schema_stability": schema_stability, "cdc_method": cdc_method, "vm_type": vm_type,
     }

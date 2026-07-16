@@ -17,7 +17,7 @@ from databricks_client import run_estimate
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
 
 YES_NO = ("Yes", "No")
-LOAD_TYPES = ("Bulk", "Incremental")
+LOAD_TYPES = ("Bulk", "Incremental", "Mix")
 INGESTION_METHODS = tuple(INGESTION_SOURCE_MAP.keys())
 
 # Source System is a business-facing intake, so the more technical fields offer
@@ -29,7 +29,7 @@ NOT_SURE = "Not sure"
 VM_TYPE_CHOICES         = VM_TYPES + (NOT_SURE,)
 PRIMARY_KEY_CHOICES     = PRIMARY_KEY_OPTIONS + (NOT_SURE,)
 DELETE_HANDLING_CHOICES = DELETE_HANDLING_OPTIONS + (NOT_SURE,)
-CDC_METHOD_CHOICES      = CDC_METHOD_OPTIONS + (NOT_SURE,)
+CDC_METHOD_CHOICES      = CDC_METHOD_OPTIONS + ("Custom Logic", NOT_SURE)
 
 ALL_DATA_STRUCTURES = (
     "Sql Server", "Sybase", "Postgres", "csv", "parquet", "xlsb", "xls", "API", "Other",
@@ -48,7 +48,7 @@ def render_source_systems_page() -> None:
         "source system, and the objects you need.",
     )
 
-    render_form_heading("Source Systems Request", 16)
+    render_form_heading("Source Systems Request", 15)
 
     # ── Cascade: Ingestion Method → Source System → Data Structure ────────────
     # These sit outside the form so they react to each other immediately.
@@ -136,6 +136,37 @@ def render_source_systems_page() -> None:
         key="ss_objects_editor",
     )
 
+    # ── Load type ─────────────────────────────────────────────────────────────
+    # Kept outside the form so choosing "Mix" can reveal the per-table split
+    # (widgets inside an st.form don't rerun until submit).
+    st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+    st.markdown("##### Load Type")
+    st.caption(
+        "Full reload each run (Bulk), only changed records (Incremental), or "
+        "Mix if some objects are Bulk and others Incremental."
+    )
+    load_type = st.radio(
+        "Load type",
+        options=LOAD_TYPES,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="ss_load_type",
+    )
+
+    bulk_table_count = None
+    incremental_table_count = None
+    if load_type == "Mix":
+        mix_bulk, mix_incr = st.columns(2, gap="large")
+        with mix_bulk:
+            bulk_table_count = st.number_input(
+                "Bulk tables", min_value=0, value=0, step=1, key="ss_bulk_count"
+            )
+        with mix_incr:
+            incremental_table_count = st.number_input(
+                "Incremental tables", min_value=0, value=0, step=1, key="ss_incr_count"
+            )
+        st.caption("Bulk + Incremental must add up to the number of Source Objects above.")
+
     # ── Main form ─────────────────────────────────────────────────────────────
     st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
     st.markdown("##### Request Details")
@@ -193,7 +224,7 @@ def render_source_systems_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_sla, col_lt = st.columns(2, gap="large")
+        col_sla, col_vm = st.columns(2, gap="large")
         with col_sla:
             render_field_intro(9, "SLA (hours)", "How many hours this data needs to be ready within, after each run starts. Only fill this in if you have a real deadline — otherwise tick the box and we'll size a standard cluster and tell you how long it takes.")
             sla_not_sure = st.checkbox("No deadline / not sure", key="ss_sla_not_sure")
@@ -206,19 +237,8 @@ def render_source_systems_page() -> None:
                 label_visibility="collapsed",
                 disabled=sla_not_sure,
             )
-        with col_lt:
-            render_field_intro(10, "Load type", "Please select whether this is a full reload (Bulk) or only changed records (Incremental)")
-            load_type = st.radio(
-                "Load type",
-                options=LOAD_TYPES,
-                horizontal=True,
-                label_visibility="collapsed",
-            )
-
-        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_vm, _col_spacer = st.columns(2, gap="large")
         with col_vm:
-            render_field_intro(11, "VM type", "The virtual machine type this pipeline runs on. Choose 'Not sure' and we'll use a sensible default.")
+            render_field_intro(10, "VM type", "The virtual machine type this pipeline runs on. Choose 'Not sure' and we'll use a sensible default.")
             vm_type = st.selectbox(
                 "VM type",
                 options=VM_TYPE_CHOICES,
@@ -231,7 +251,7 @@ def render_source_systems_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_g, col_h = st.columns(2, gap="large")
         with col_g:
-            render_field_intro(12, "Primary key available", "Whether this source has a unique identifier per record. Choose 'Not sure' if you don't know.")
+            render_field_intro(11, "Primary key available", "Whether this source has a unique identifier per record. Choose 'Not sure' if you don't know.")
             primary_key_available = st.selectbox(
                 "Primary key available",
                 options=PRIMARY_KEY_CHOICES,
@@ -240,7 +260,7 @@ def render_source_systems_page() -> None:
                 label_visibility="collapsed",
             )
         with col_h:
-            render_field_intro(13, "Delete handling", "How deleted records should be handled. Choose 'Not sure' if you don't know.")
+            render_field_intro(12, "Delete handling", "How deleted records should be handled. Choose 'Not sure' if you don't know.")
             delete_handling = st.selectbox(
                 "Delete handling",
                 options=DELETE_HANDLING_CHOICES,
@@ -252,7 +272,7 @@ def render_source_systems_page() -> None:
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_i, col_j = st.columns(2, gap="large")
         with col_i:
-            render_field_intro(14, "Schema stability", "Please select how often you expect the structure of this data to change")
+            render_field_intro(13, "Schema stability", "Please select how often you expect the structure of this data to change")
             schema_stability = st.selectbox(
                 "Schema stability",
                 options=SCHEMA_STABILITY_OPTIONS,
@@ -261,7 +281,7 @@ def render_source_systems_page() -> None:
                 label_visibility="collapsed",
             )
         with col_j:
-            render_field_intro(15, "CDC method", "How changes will be tracked for this source. Choose 'Not sure' if you don't know.")
+            render_field_intro(14, "CDC method", "How changes will be tracked for this source. Choose 'Not sure' if you don't know.")
             cdc_method = st.selectbox(
                 "CDC method",
                 options=CDC_METHOD_CHOICES,
@@ -271,7 +291,7 @@ def render_source_systems_page() -> None:
             )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(16, "Contains PHI", "Please select Yes if this data includes Protected Health Information")
+        render_field_intro(15, "Contains PHI", "Please select Yes if this data includes Protected Health Information")
         contains_phi = st.radio(
             "Contains PHI",
             options=YES_NO,
@@ -308,6 +328,22 @@ def render_source_systems_page() -> None:
             st.error("Please add at least one Source Object and EDH Table Name.")
             return
 
+        # Validate the Mix split against the number of source objects.
+        if load_type == "Mix":
+            if bulk_table_count < 1 or incremental_table_count < 1:
+                st.error(
+                    "For a Mix load, enter at least one Bulk table and one Incremental "
+                    "table — otherwise choose Bulk or Incremental."
+                )
+                return
+            if bulk_table_count + incremental_table_count != len(valid_rows):
+                st.error(
+                    f"Bulk + Incremental tables ({int(bulk_table_count)} + "
+                    f"{int(incremental_table_count)}) must equal the number of Source "
+                    f"Objects ({len(valid_rows)})."
+                )
+                return
+
         # Validate form fields
         missing = [
             name for name, val in [
@@ -328,10 +364,10 @@ def render_source_systems_page() -> None:
         # The Load Type / CDC coupling only applies to concrete CDC answers —
         # "Not sure" is always allowed (the estimator assumes a moderate default).
         if cdc_method != NOT_SURE:
-            if load_type == "Incremental" and cdc_method == "Not Applicable":
-                st.error("CDC Method cannot be 'Not Applicable' when Load Type is Incremental. Choose a method or 'Not sure'.")
+            if load_type in ("Incremental", "Mix") and cdc_method == "Not Applicable":
+                st.error("CDC Method cannot be 'Not Applicable' when Load Type is Incremental or Mix. Choose a method or 'Not sure'.")
                 return
-            if load_type == "Bulk" and cdc_method not in ("Not Applicable",):
+            if load_type == "Bulk" and cdc_method != "Not Applicable":
                 st.error("CDC Method should be 'Not Applicable' when Load Type is Bulk. Choose 'Not Applicable' or 'Not sure'.")
                 return
 
@@ -357,6 +393,8 @@ def render_source_systems_page() -> None:
                     "sla_time_hr":            "Not sure" if sla_not_sure else str(sla_time_hr),
                     "ingestion_frequency":    ingestion_frequency,
                     "load_type":              load_type,
+                    "bulk_table_count":       str(int(bulk_table_count)) if load_type == "Mix" else "",
+                    "incremental_table_count": str(int(incremental_table_count)) if load_type == "Mix" else "",
                     "primary_key_available":  primary_key_available,
                     "delete_handling":        delete_handling,
                     "schema_stability":       schema_stability,
