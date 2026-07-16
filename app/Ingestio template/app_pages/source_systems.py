@@ -202,26 +202,27 @@ def render_source_systems_page() -> None:
 
         # Section: Load configuration
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        col_e, col_f = st.columns(2, gap="large")
-        with col_e:
-            render_field_intro(7, "Data volume (GB)", "Please fill the estimated total size of the data in GB")
-            additional_gb = st.number_input(
-                "Data volume (GB)",
-                min_value=0.01,
-                value=1.0,
-                step=0.5,
-                format="%.2f",
-                label_visibility="collapsed",
-            )
-        with col_f:
-            render_field_intro(8, "Ingestion frequency", "Please select how often this data should be loaded")
-            ingestion_frequency = st.selectbox(
-                "Ingestion frequency",
-                options=INGESTION_FREQUENCIES,
-                index=None,
-                placeholder="Select frequency",
-                label_visibility="collapsed",
-            )
+        render_field_intro(7, "Data volume by environment (GB)", "Estimated data size in each environment. Dev, Test, Pre-prod and Prod are added together for the cost estimate.")
+        vol_dev, vol_test, vol_preprod, vol_prod = st.columns(4, gap="medium")
+        with vol_dev:
+            dev_gb = st.number_input("Dev (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ss_dev_gb")
+        with vol_test:
+            test_gb = st.number_input("Test (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ss_test_gb")
+        with vol_preprod:
+            preprod_gb = st.number_input("Pre-prod (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ss_preprod_gb")
+        with vol_prod:
+            prod_gb = st.number_input("Prod (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ss_prod_gb")
+        additional_gb = dev_gb + test_gb + preprod_gb + prod_gb
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        render_field_intro(8, "Ingestion frequency", "Please select how often this data should be loaded")
+        ingestion_frequency = st.selectbox(
+            "Ingestion frequency",
+            options=INGESTION_FREQUENCIES,
+            index=None,
+            placeholder="Select frequency",
+            label_visibility="collapsed",
+        )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_sla, col_vm = st.columns(2, gap="large")
@@ -316,6 +317,10 @@ def render_source_systems_page() -> None:
             return
         if not data_structure:
             st.error("Please select a Source Data Structure.")
+            return
+
+        if additional_gb <= 0:
+            st.error("Please enter a data volume greater than 0 for at least one environment (Dev / Test / Pre-prod / Prod).")
             return
 
         # Validate source objects table

@@ -108,15 +108,17 @@ def render_new_ingestion_page() -> None:
 
         # ── Section 2: Source details ─────────────────────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        render_field_intro(9, "Data volume (GB)", "Please fill the expected size of this data source in GB")
-        source_gb = st.number_input(
-            "Data volume (GB)",
-            min_value=0.01,
-            value=1.0,
-            step=0.5,
-            format="%.2f",
-            label_visibility="collapsed",
-        )
+        render_field_intro(9, "Data volume by environment (GB)", "Please fill the expected size of this data source in each environment — Dev, Test, Pre-prod and Prod are added together for the estimate")
+        vol_dev, vol_test, vol_preprod, vol_prod = st.columns(4, gap="medium")
+        with vol_dev:
+            dev_gb = st.number_input("Dev (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ns_dev_gb")
+        with vol_test:
+            test_gb = st.number_input("Test (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ns_test_gb")
+        with vol_preprod:
+            preprod_gb = st.number_input("Pre-prod (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ns_preprod_gb")
+        with vol_prod:
+            prod_gb = st.number_input("Prod (GB)", min_value=0.0, value=0.0, step=0.5, format="%.2f", key="ns_prod_gb")
+        source_gb = dev_gb + test_gb + preprod_gb + prod_gb
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
         col_k, col_l = st.columns(2, gap="large")
@@ -274,6 +276,10 @@ def render_new_ingestion_page() -> None:
         ]
         if missing:
             st.error(f"Please fill in: {', '.join(missing)}")
+            return
+
+        if source_gb <= 0:
+            st.error("Please enter a data volume greater than 0 for at least one environment (Dev / Test / Pre-prod / Prod).")
             return
 
         if copy_interval == "incremental" and cdc_method == "Not Applicable":
