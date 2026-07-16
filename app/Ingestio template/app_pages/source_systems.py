@@ -13,7 +13,7 @@ from app_config import (
     SCHEMA_STABILITY_OPTIONS,
     VM_TYPES,
 )
-from databricks_client import trigger_estimator_job
+from databricks_client import run_estimate
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
 
 YES_NO = ("Yes", "No")
@@ -340,7 +340,7 @@ def render_source_systems_page() -> None:
         edh_table_names = valid_rows["EDH Table Name"].str.strip().tolist()
 
         try:
-            trigger_estimator_job(
+            run_estimate(
                 request_type="source_system",
                 payload={
                     "request_id":             request_id,

@@ -17,7 +17,7 @@ from app_config import (
     TRANSFORMATION_LOGICS,
     VM_TYPES,
 )
-from databricks_client import trigger_estimator_job
+from databricks_client import run_estimate
 from ui import render_back_button, render_field_intro, render_form_heading, render_page_intro
 
 YES_NO = ("Yes", "No")
@@ -287,7 +287,7 @@ def render_new_ingestion_page() -> None:
         include_egress = "true" if include_egress_raw == "Yes" else "false"
 
         try:
-            trigger_estimator_job(
+            run_estimate(
                 request_type="new_source",
                 payload={
                     "request_id":                  request_id,

@@ -10,10 +10,6 @@ REQUEST_HISTORY_PAGE = "request_history"
 
 APP_TITLE = "Ryan | Ingestion Requests"
 
-# ── Dispatcher job (handles both existing-source and new-source requests) ─────
-# Populate after running: databricks bundle deploy
-ESTIMATOR_JOB_ID: int = int(os.environ["ESTIMATOR_JOB_ID"])
-
 # ── Delta tables ──────────────────────────────────────────────────────────────
 NEW_SOURCE_REQUESTS_TABLE         = os.environ["NEW_SOURCE_REQUESTS"]
 NEW_SOURCE_ESTIMATIONS_TABLE      = os.environ["NEW_SOURCE_ESTIMATIONS"]

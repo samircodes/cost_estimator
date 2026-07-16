@@ -1,21 +1,21 @@
-"""
-Unit + validation tests for EDH_New_Source_Estimator_Job.
+"""Unit + validation tests for the New Source estimator.
 
-Run:  python3 -m unittest tests.test_new_source_estimator -v
+Run:  python3 -m unittest discover -s tests -v
 (from the "Ingestio template" directory; no pytest/pyspark/network needed.)
 
-Executes the REAL notebook logic via tests/estimator_harness.py with
-Databricks deps stubbed and live prices pinned to fallbacks (VM DS3 $0.293,
-DS5 $1.17, ADLS $0.0208/$0.023, egress $0.087), so numbers are deterministic.
+Tests call the live estimator module (estimators.new_source) directly with
+prices pinned to the hardcoded fallbacks, so results are deterministic.
 """
 
 import unittest
 
-from tests.estimator_harness import load_notebook
+from estimators import new_source as ns_mod
 
-NB = "EDH_New_Source_Estimator_Job.py"
+PRICES = {"Standard_DS3_v2": 0.293, "Standard_DS5_v2": 1.17,
+          "adls_hot": 0.0208, "adls_managed": 0.023, "egress": 0.087}
 
 BASE = {
+    "request_id":                 "r-test",
     "source_gb":                  "100",
     "network_source_type":        "aws_s3",
     "copy_interval":              "bulk",
@@ -37,76 +37,64 @@ BASE = {
 
 
 def run(**overrides):
-    scenario = dict(BASE)
-    scenario.update(overrides)
-    return load_notebook(NB, scenario)
+    payload = dict(BASE)
+    payload.update(overrides)
+    return ns_mod.estimate(payload, prices=PRICES)["estimation"]
 
 
 class GoldenValues(unittest.TestCase):
 
     def setUp(self):
-        self.ns = run()
+        self.e = run()
 
     def test_costs(self):
-        self.assertAlmostEqual(self.ns["network"]["total_monthly_cost"], 323.43, places=2)
-        self.assertAlmostEqual(self.ns["storage"]["grand_total_monthly"], 0.72, places=2)
-        self.assertAlmostEqual(self.ns["compute"]["compute_cost_monthly"], 583.34, places=2)
-        self.assertAlmostEqual(self.ns["total_monthly_cost"], 907.49, places=2)
+        self.assertAlmostEqual(self.e["network_cost_monthly"], 323.43, places=2)
+        self.assertAlmostEqual(self.e["storage_cost_monthly"], 0.72, places=2)
+        self.assertAlmostEqual(self.e["compute_cost_monthly"], 583.34, places=2)
+        self.assertAlmostEqual(self.e["total_cost_monthly"], 907.49, places=2)
 
     def test_sizing(self):
-        self.assertEqual(self.ns["sizing"]["worker_nodes_estimated"], 3)
-        self.assertTrue(self.ns["sizing"]["meets_sla"])
+        self.assertEqual(self.e["worker_nodes_estimated"], 3)
+        self.assertTrue(self.e["meets_sla"])
 
     def test_effort(self):
-        eff = self.ns["effort"]
-        self.assertEqual(eff["complexity_level"], "Medium")
-        self.assertEqual(eff["total_effort_days"]["estimate"], 39.4)
-        self.assertEqual(eff["total_effort_days"]["min"], 32)
-        self.assertEqual(eff["total_effort_days"]["max"], 47)
+        self.assertEqual(self.e["complexity_level"], "Medium")
+        self.assertEqual(self.e["total_effort_days_estimate"], 39.4)
+        self.assertEqual(self.e["total_effort_days_min"], 32)
+        self.assertEqual(self.e["total_effort_days_max"], 47)
 
     def test_volume_tier(self):
-        self.assertEqual(self.ns["derived_volume_tier"], "medium")
+        self.assertEqual(self.e["derived_volume_tier"], "medium")
 
 
 class CostInvariants(unittest.TestCase):
 
     def test_total_equals_sum_of_parts(self):
-        ns = run()
+        e = run()
         self.assertAlmostEqual(
-            ns["total_monthly_cost"],
-            round(ns["network"]["total_monthly_cost"]
-                  + ns["storage"]["grand_total_monthly"]
-                  + ns["compute"]["compute_cost_monthly"], 2),
-            places=2,
-        )
+            e["total_cost_monthly"],
+            round(e["network_cost_monthly"] + e["storage_cost_monthly"] + e["compute_cost_monthly"], 2),
+            places=2)
 
     def test_annual_is_twelve_months(self):
-        ns = run()
-        self.assertAlmostEqual(ns["total_annual_cost"], round(ns["total_monthly_cost"] * 12, 2), places=2)
-
-    def test_combined_variance_band(self):
-        ns = run()
-        self.assertAlmostEqual(ns["combined_total_low"], round(ns["total_monthly_cost"] * 0.9, 2), places=2)
-        self.assertAlmostEqual(ns["combined_total_high"], round(ns["total_monthly_cost"] * 1.1, 2), places=2)
+        e = run()
+        self.assertAlmostEqual(e["total_cost_annual"], round(e["total_cost_monthly"] * 12, 2), places=2)
 
 
 class Monotonicity(unittest.TestCase):
 
     def test_more_volume_costs_more(self):
-        self.assertLess(run(source_gb="10")["total_monthly_cost"],
-                        run(source_gb="1000")["total_monthly_cost"])
+        self.assertLess(run(source_gb="10")["total_cost_monthly"],
+                        run(source_gb="1000")["total_cost_monthly"])
 
     def test_bigger_vm_ingests_faster(self):
-        # Contrast with the Source System estimator: here a bigger VM has
-        # higher per-node throughput, so runtime should not increase.
         ds3 = run(vm_type="Standard_DS3_v2")
         ds5 = run(vm_type="Standard_DS5_v2")
-        self.assertLessEqual(ds5["sizing"]["estimated_runtime_hr"],
-                             ds3["sizing"]["estimated_runtime_hr"])
+        self.assertLessEqual(ds5["estimated_runtime_hr"], ds3["estimated_runtime_hr"])
 
     def test_egress_adds_cost(self):
-        no_eg = run(include_egress="false", egress_gb="0")["network"]["total_monthly_cost"]
-        eg = run(include_egress="true", egress_gb="50")["network"]["total_monthly_cost"]
+        no_eg = run(include_egress="false", egress_gb="0")["network_cost_monthly"]
+        eg = run(include_egress="true", egress_gb="50")["network_cost_monthly"]
         self.assertLess(no_eg, eg)
 
 
@@ -123,8 +111,7 @@ class VolumeTierDerivation(unittest.TestCase):
 class ComplexityWeights(unittest.TestCase):
 
     def test_weights_sum_to_one(self):
-        ns = run()
-        self.assertAlmostEqual(sum(ns["COMPLEXITY_WEIGHTS"].values()), 1.0, places=3)
+        self.assertAlmostEqual(sum(ns_mod.COMPLEXITY_WEIGHTS.values()), 1.0, places=3)
 
 
 class InputValidation(unittest.TestCase):

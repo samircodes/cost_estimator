@@ -1,24 +1,20 @@
-import json
-import time
+from datetime import datetime, timezone
 from typing import Any
 
 from databricks.connect import DatabricksSession
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.jobs import RunLifeCycleState, RunResultState
+from pyspark.sql.types import (
+    BooleanType, DoubleType, IntegerType, StringType, StructField, StructType, TimestampType,
+)
 
 from app_config import (
     ADMIN_USERS_TABLE,
     COMBINED_ESTIMATIONS_TABLE,
-    ESTIMATOR_JOB_ID,
     NEW_SOURCE_ESTIMATIONS_TABLE,
     NEW_SOURCE_REQUESTS_TABLE,
     SOURCE_SYSTEM_ESTIMATIONS_TABLE,
     SOURCE_SYSTEM_REQUESTS_TABLE,
 )
-
-
-def _client() -> WorkspaceClient:
-    return WorkspaceClient()
+from estimators import new_source, schemas, source_system
 
 
 def _spark() -> DatabricksSession:
@@ -41,33 +37,50 @@ def fetch_admin_emails() -> set[str]:
     return {row[0].strip().lower() for row in rows if row[0] and row[0].strip()}
 
 
-def trigger_estimator_job(request_type: str, payload: dict) -> int:
-    run = _client().jobs.run_now(
-        job_id=ESTIMATOR_JOB_ID,
-        job_parameters={
-            "request_type": request_type,
-            "payload":      json.dumps(payload),
-        },
-    )
-    return run.run_id
+# ── In-app estimation + Delta persistence ─────────────────────────────────────
+# The cost/effort calculation used to run as a Databricks job; it now runs in
+# the app via the estimators package, and we write the same Delta tables here so
+# Request History keeps working.
+
+_TYPE_MAP = {
+    "str": StringType, "double": DoubleType, "int": IntegerType,
+    "bool": BooleanType, "ts": TimestampType,
+}
 
 
-def wait_for_run(run_id: int, timeout_seconds: int = 300) -> tuple[bool, str]:
-    client   = _client()
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        run   = client.jobs.get_run(run_id=run_id)
-        state = run.state
-        if state.life_cycle_state in (
-            RunLifeCycleState.TERMINATED,
-            RunLifeCycleState.SKIPPED,
-            RunLifeCycleState.INTERNAL_ERROR,
-        ):
-            success = state.result_state == RunResultState.SUCCESS
-            message = state.state_message or ("Completed" if success else "Job failed")
-            return success, message
-        time.sleep(3)
-    return False, f"Timed out after {timeout_seconds}s"
+def _spark_schema(schema_meta) -> StructType:
+    return StructType([StructField(name, _TYPE_MAP[code](), True) for name, code in schema_meta])
+
+
+def _append(table: str, schema_meta, row: dict, ts_col: str, ts: datetime) -> None:
+    values = tuple(ts if name == ts_col else row.get(name) for name, _ in schema_meta)
+    df = _spark().createDataFrame([values], _spark_schema(schema_meta))
+    df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(table)
+
+
+def run_estimate(request_type: str, payload: dict) -> dict[str, Any]:
+    """Compute the estimate in-app and persist request / estimation / combined
+    rows to Delta. Returns the estimator result dict."""
+    if request_type == "source_system":
+        result = source_system.estimate(payload)
+        request_table = SOURCE_SYSTEM_REQUESTS_TABLE
+        estimation_table = SOURCE_SYSTEM_ESTIMATIONS_TABLE
+        request_schema = schemas.SOURCE_SYSTEM_REQUEST
+        estimation_schema = schemas.SOURCE_SYSTEM_ESTIMATION
+    elif request_type == "new_source":
+        result = new_source.estimate(payload)
+        request_table = NEW_SOURCE_REQUESTS_TABLE
+        estimation_table = NEW_SOURCE_ESTIMATIONS_TABLE
+        request_schema = schemas.NEW_SOURCE_REQUEST
+        estimation_schema = schemas.NEW_SOURCE_ESTIMATION
+    else:
+        raise ValueError(f"Unknown request_type '{request_type}'")
+
+    now = datetime.now(timezone.utc)
+    _append(request_table, request_schema, result["request"], schemas.REQUEST_TS, now)
+    _append(estimation_table, estimation_schema, result["estimation"], schemas.ESTIMATION_TS, now)
+    _append(COMBINED_ESTIMATIONS_TABLE, schemas.COMBINED, result["combined"], schemas.ESTIMATION_TS, now)
+    return result
 
 
 COMBINED_COLS = [
