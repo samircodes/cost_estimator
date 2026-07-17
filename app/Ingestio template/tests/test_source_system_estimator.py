@@ -24,7 +24,6 @@ BASE = {
     "source_objects":        "orders",
     "edh_table_names":       "edh_orders",
     "additional_gb":         "100",
-    "sla_time_hr":           "2",
     "ingestion_frequency":   "Daily",
     "load_type":             "Bulk",
     "primary_key_available": "Yes",
@@ -38,7 +37,7 @@ BASE = {
 
 def run(**overrides):
     """Returns a flat dict of the estimation row plus the combined variance
-    bands and a convenience sla_specified flag."""
+    bands."""
     payload = dict(BASE)
     payload.update(overrides)
     result = ss.estimate(payload, prices=PRICES)
@@ -46,7 +45,6 @@ def run(**overrides):
     for k, v in result["combined"].items():
         if k.endswith("_low") or k.endswith("_high"):
             flat[k] = v
-    flat["sla_specified"] = flat["sla_time_hr"] is not None
     return flat
 
 
@@ -57,7 +55,7 @@ class GoldenValues(unittest.TestCase):
         self.ns = run()
 
     def test_compute_cost(self):
-        self.assertAlmostEqual(self.ns["compute_cost"], 395.645, places=2)
+        self.assertAlmostEqual(self.ns["compute_cost"], 461.337, places=2)
 
     def test_storage_cost(self):
         self.assertAlmostEqual(self.ns["storage_cost"], 0.90, places=2)
@@ -66,13 +64,15 @@ class GoldenValues(unittest.TestCase):
         self.assertAlmostEqual(self.ns["networking_cost"], 60.00, places=2)
 
     def test_total_monthly(self):
-        self.assertAlmostEqual(self.ns["total_monthly_cost"], 456.545, places=2)
+        self.assertAlmostEqual(self.ns["total_monthly_cost"], 522.237, places=2)
 
-    def test_sizing_meets_sla(self):
-        self.assertEqual(self.ns["worker_nodes_estimated"], 4)
-        self.assertEqual(self.ns["ingestion_nodes"], 5)
-        self.assertAlmostEqual(self.ns["runtime_hrs"], 1.7667, places=3)
-        self.assertTrue(self.ns["meets_sla"])
+    def test_sizing_from_volume(self):
+        # 100 GB Bulk / 50 GB-per-worker -> 2 workers (+1 driver). No SLA.
+        self.assertEqual(self.ns["worker_nodes_estimated"], 2)
+        self.assertEqual(self.ns["ingestion_nodes"], 3)
+        self.assertAlmostEqual(self.ns["runtime_hrs"], 3.4333, places=3)
+        self.assertIsNone(self.ns["meets_sla"])
+        self.assertIsNone(self.ns["sla_time_hr"])
 
     def test_effort(self):
         self.assertAlmostEqual(self.ns["complexity_score"], 3.50, places=2)
@@ -130,41 +130,33 @@ class Monotonicity(unittest.TestCase):
         self.assertGreater(ds5["throughput_gb_hr"], ds3["throughput_gb_hr"])
         self.assertLessEqual(ds5["worker_nodes_estimated"], ds3["worker_nodes_estimated"])
         self.assertLessEqual(ds5["compute_cost"], ds3["compute_cost"])
-        self.assertTrue(ds5["meets_sla"])
 
 
-class SlaSizing(unittest.TestCase):
+class VolumeSizing(unittest.TestCase):
+    """Worker count is sized purely from volume (no SLA)."""
 
-    def test_tighter_sla_needs_more_workers(self):
-        self.assertLess(run(sla_time_hr="8")["worker_nodes_estimated"],
-                        run(sla_time_hr="0.5")["worker_nodes_estimated"])
+    def test_sizes_cluster_from_the_work(self):
+        ns = run(additional_gb="100")
+        self.assertEqual(ns["worker_nodes_estimated"], math.ceil(100 / ss.TARGET_GB_PER_WORKER))
 
-    def test_runtime_within_sla_when_feasible(self):
-        for sla in ("0.5", "2", "8", "24"):
-            with self.subTest(sla=sla):
-                ns = run(sla_time_hr=sla)
-                self.assertLessEqual(ns["runtime_hrs"], float(sla))
-                self.assertTrue(ns["meets_sla"])
+    def test_sizing_is_monotonic(self):
+        volumes = [50, 190, 199, 200, 210, 499, 500, 1000, 5000]
+        workers = [run(additional_gb=str(v))["worker_nodes_estimated"] for v in volumes]
+        for smaller, bigger in zip(workers, workers[1:]):
+            self.assertLessEqual(smaller, bigger)
 
-    def test_runtime_includes_startup_overhead(self):
-        ns = run(sla_time_hr="0.5", additional_gb="1")
-        self.assertGreaterEqual(ns["runtime_hrs"], ss.CLUSTER_STARTUP_HR)
-
-    def test_impossible_sla_is_infeasible(self):
-        ns = run(sla_time_hr="0.05")
-        self.assertFalse(ns["meets_sla"])
+    def test_respects_worker_cap(self):
+        ns = run(additional_gb="100000")
         self.assertEqual(ns["worker_nodes_estimated"], ss.MAX_WORKERS)
 
-    def test_cost_is_u_shaped_in_sla(self):
-        tight = run(sla_time_hr="0.2")["total_monthly_cost"]
-        middle = run(sla_time_hr="1")["total_monthly_cost"]
-        loose = run(sla_time_hr="24")["total_monthly_cost"]
-        self.assertLess(middle, tight)
-        self.assertLess(middle, loose)
+    def test_runtime_includes_startup_overhead(self):
+        ns = run(additional_gb="1")
+        self.assertGreaterEqual(ns["runtime_hrs"], ss.CLUSTER_STARTUP_HR)
 
-    def test_zero_sla_raises(self):
-        with self.assertRaises(ValueError):
-            run(sla_time_hr="0")
+    def test_no_sla_fields_claimed(self):
+        ns = run()
+        self.assertIsNone(ns["sla_time_hr"])
+        self.assertIsNone(ns["meets_sla"])
 
 
 class NotSureDefaults(unittest.TestCase):
@@ -175,27 +167,6 @@ class NotSureDefaults(unittest.TestCase):
         self.assertEqual(ns["vm_type"], "Standard_DS3_v2")
         self.assertAlmostEqual(ns["compute_cost"], ds3["compute_cost"], places=6)
 
-    def test_sla_not_sure_makes_no_deadline_claim(self):
-        ns = run(sla_time_hr="Not sure")
-        self.assertIsNone(ns["sla_time_hr"])
-        self.assertIsNone(ns["meets_sla"])
-        self.assertFalse(ns["sla_specified"])
-
-    def test_sla_not_sure_sizes_cluster_from_the_work(self):
-        ns = run(sla_time_hr="Not sure", additional_gb="100")
-        self.assertEqual(ns["worker_nodes_estimated"], math.ceil(100 / ss.TARGET_GB_PER_WORKER))
-
-    def test_sla_not_sure_sizing_is_monotonic(self):
-        volumes = [50, 190, 199, 200, 210, 499, 500, 1000, 5000]
-        workers = [run(sla_time_hr="Not sure", additional_gb=str(v))["worker_nodes_estimated"]
-                   for v in volumes]
-        for smaller, bigger in zip(workers, workers[1:]):
-            self.assertLessEqual(smaller, bigger)
-
-    def test_sla_not_sure_respects_worker_cap(self):
-        ns = run(sla_time_hr="Not sure", additional_gb="100000")
-        self.assertEqual(ns["worker_nodes_estimated"], ss.MAX_WORKERS)
-
     def test_effort_fields_not_sure_use_moderate_contingency(self):
         ns = run(cdc_method="Not sure", delete_handling="Not sure",
                  primary_key_available="Not sure", load_type="Incremental")
@@ -203,7 +174,7 @@ class NotSureDefaults(unittest.TestCase):
         self.assertGreater(ns["total_effort_days_estimate"], 0.0)
 
     def test_all_not_sure_runs_cleanly(self):
-        ns = run(vm_type="Not sure", sla_time_hr="Not sure", cdc_method="Not sure",
+        ns = run(vm_type="Not sure", cdc_method="Not sure",
                  delete_handling="Not sure", primary_key_available="Not sure",
                  load_type="Incremental")
         self.assertGreater(ns["total_monthly_cost"], 0.0)

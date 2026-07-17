@@ -123,7 +123,6 @@ def estimate(payload, prices=None):
     source_objects_raw     = payload.get("source_objects", "")
     edh_table_names_raw    = payload.get("edh_table_names", "")
     additional_gb          = float(payload["additional_gb"])
-    sla_raw                = payload.get("sla_time_hr", "Not sure")
     ingestion_frequency    = payload["ingestion_frequency"]
     load_type              = payload["load_type"]
     primary_key_available  = payload.get("primary_key_available", "Not sure")
@@ -146,11 +145,6 @@ def estimate(payload, prices=None):
     vm_type_effective = DEFAULT_VM_TYPE if vm_type == "Not sure" else vm_type
     if vm_type_effective not in VM_THROUGHPUT_MULTIPLIER:
         raise ValueError(f"Invalid vm_type. Choose from: {list(VALID_VM_TYPES) + ['Not sure']}")
-
-    sla_specified = str(sla_raw).strip().lower() != "not sure"
-    sla_time_hr = float(sla_raw) if sla_specified else None
-    if sla_specified and sla_time_hr <= 0:
-        raise ValueError("sla_time_hr must be greater than 0")
 
     source_objects_list = [s.strip() for s in source_objects_raw.split(",") if s.strip()]
     n_objects = max(len(source_objects_list), 1)
@@ -175,21 +169,15 @@ def estimate(payload, prices=None):
 
     effective_gb_per_run = additional_gb * load_factor
 
-    if sla_specified:
-        usable_hr = sla_time_hr - CLUSTER_STARTUP_HR
-        if usable_hr <= 0:
-            worker_nodes_estimated = MAX_WORKERS
-        else:
-            worker_nodes_raw = effective_gb_per_run / (usable_hr * throughput)
-            worker_nodes_estimated = max(1, min(MAX_WORKERS, math.ceil(worker_nodes_raw)))
-    else:
-        worker_nodes_estimated = max(
-            1, min(MAX_WORKERS, math.ceil(effective_gb_per_run / TARGET_GB_PER_WORKER))
-        )
-
+    # Worker count is sized purely from volume (target GB per worker); Source
+    # System requests no longer carry an SLA.
+    worker_nodes_estimated = max(
+        1, min(MAX_WORKERS, math.ceil(effective_gb_per_run / TARGET_GB_PER_WORKER))
+    )
     ingestion_nodes = worker_nodes_estimated + DRIVER_NODES
     runtime_hrs = CLUSTER_STARTUP_HR + effective_gb_per_run / (worker_nodes_estimated * throughput)
-    meets_sla = (runtime_hrs <= sla_time_hr) if sla_specified else None
+    sla_time_hr = None
+    meets_sla = None
 
     object_multiplier = 1.0 + (n_objects - 1) * OBJECT_OVERHEAD_FACTOR
 

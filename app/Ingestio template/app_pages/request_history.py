@@ -114,7 +114,7 @@ def _render_source_system_details(detail: dict) -> None:
             st.markdown(f"- **{src.strip()}** → `{edh.strip()}`")
 
     st.markdown("##### Load Configuration")
-    l1, l2, l3, l4, l5 = st.columns(5)
+    l1, l2, l3, l4 = st.columns(4)
     l1.markdown(f"**Volume**  \n{detail.get('additional_gb') or '—'} GB")
     l2.markdown(f"**Frequency**  \n{detail.get('ingestion_frequency') or '—'}")
     load_type = detail.get("load_type") or "—"
@@ -122,8 +122,6 @@ def _render_source_system_details(detail: dict) -> None:
         load_type = f"Mix ({detail.get('bulk_table_count') or 0} bulk / {detail.get('incremental_table_count') or 0} incr)"
     l3.markdown(f"**Load Type**  \n{load_type}")
     l4.markdown(f"**VM Type**  \n{detail.get('vm_type') or '—'}")
-    sla = detail.get("sla_time_hr")
-    l5.markdown(f"**SLA**  \n{f'{sla} hr' if sla else 'No deadline'}")
 
     st.markdown("##### Governance")
     g1, g2, g3, g4 = st.columns(4)
