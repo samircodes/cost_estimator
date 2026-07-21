@@ -132,17 +132,22 @@ def _render_source_system_details(detail: dict) -> None:
 
 
 def render_request_history_page() -> None:
-    if not is_admin():
-        st.error("You do not have permission to view this page.")
-        return
+    admin = is_admin()
 
     render_back_button("back_from_history")
 
-    render_page_intro(
-        "Dashboard",
-        "Request History & Costs",
-        "Review historical ingestion requests, estimated costs, and delivery status.",
-    )
+    if admin:
+        render_page_intro(
+            "Dashboard",
+            "Request History & Costs",
+            "Review historical ingestion requests, estimated costs, and delivery status.",
+        )
+    else:
+        render_page_intro(
+            "Dashboard",
+            "Request History",
+            "Review historical ingestion requests and their submitted details.",
+        )
 
     try:
         rows = fetch_all_estimates()
@@ -209,17 +214,19 @@ def render_request_history_page() -> None:
 
         sep = "<hr style='margin:12px 0;border:none;border-top:1px solid #e5e7eb'>"
 
-        cost_html = (
-            f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>"
-            f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),       _fmt(row['compute_cost_high']),       'compute')}"
-            f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),       _fmt(row['storage_cost_high']),       'storage')}"
-            f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),    _fmt(row['networking_cost_high']),    'network')}"
-            f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']), _fmt(row['total_cost_monthly_high']), 'total')}"
-            f"</div>"
-        )
+        cost_html = ""
+        if admin:
+            cost_html = (
+                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>"
+                f"{_cost_cell('Compute /mo', _fmt(row['compute_cost_low']),       _fmt(row['compute_cost_high']),       'compute')}"
+                f"{_cost_cell('Storage /mo', _fmt(row['storage_cost_low']),       _fmt(row['storage_cost_high']),       'storage')}"
+                f"{_cost_cell('Network /mo', _fmt(row['networking_cost_low']),    _fmt(row['networking_cost_high']),    'network')}"
+                f"{_cost_cell('Total /mo',   _fmt(row['total_cost_monthly_low']), _fmt(row['total_cost_monthly_high']), 'total')}"
+                f"</div>"
+            )
 
         effort_html = ""
-        if effort_level and effort_est is not None:
+        if admin and effort_level and effort_est is not None:
             effort_html = (
                 f"{sep}"
                 f"<p style='margin:0;font-size:0.85rem;color:#374151'>"
@@ -240,7 +247,7 @@ def render_request_history_page() -> None:
                 f"  border-radius:4px;flex-shrink:0'></div>"
                 f"  <div style='flex:1;min-width:0'>"
                 f"    {header_html}"
-                f"    {sep}"
+                f"    {sep if cost_html else ''}"
                 f"    {cost_html}"
                 f"    {effort_html}"
                 f"  </div>"

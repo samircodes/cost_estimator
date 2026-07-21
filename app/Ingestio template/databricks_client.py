@@ -27,9 +27,9 @@ def _run_query(statement: str) -> list[list]:
 
 
 def fetch_admin_emails() -> set[str]:
-    """Empty set on an empty table or a failed lookup - callers should treat
-    that the same as "no restriction", matching the old unset-ADMIN_USERS
-    behaviour."""
+    """Empty set on an empty table or a failed lookup - callers treat an email
+    outside this set as a normal (non-admin) user, so an empty table means
+    nobody is an admin and everyone gets the details-only view."""
     try:
         rows = _run_query(f"SELECT email FROM {ADMIN_USERS_TABLE}")
     except Exception:

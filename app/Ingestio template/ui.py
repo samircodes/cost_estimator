@@ -28,7 +28,7 @@ def is_admin() -> bool:
     if "_admin_emails" not in st.session_state:
         st.session_state["_admin_emails"] = fetch_admin_emails()
     admin_emails = st.session_state["_admin_emails"]
-    return not admin_emails or current_user_email() in admin_emails
+    return current_user_email() in admin_emails
 
 
 def render_header():
@@ -47,10 +47,9 @@ def render_header():
 
 
 def render_admin_action(placeholder) -> None:
-    if not is_admin():
-        return
+    label = "Request History & Costs" if is_admin() else "Request History"
     with placeholder:
-        if st.button("Request History & Costs", key="open_request_history"):
+        if st.button(label, key="open_request_history"):
             navigate_to(REQUEST_HISTORY_PAGE)
 
 
