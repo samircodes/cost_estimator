@@ -116,12 +116,18 @@ def estimate(payload, prices=None):
     request_date           = payload.get("request_date", "")
     requestor              = payload.get("requestor", "")
     business_justification = payload.get("business_justification", "")
+    additional_details     = payload.get("additional_details", "")
     contains_phi           = payload.get("contains_phi", "No")
     ingestion_method       = payload["ingestion_method"]
     source_system          = payload.get("source_system", "")
     data_structure         = payload.get("data_structure", "")
+    # data_structure may now be a comma-separated list of structures (multi-select).
+    # The cost/complexity lookups need a single structure, so use the primary one
+    # (falls back to data_structure for older single-value payloads).
+    data_structure_primary = payload.get("data_structure_primary", "") or data_structure
     source_objects_raw     = payload.get("source_objects", "")
     edh_table_names_raw    = payload.get("edh_table_names", "")
+    primary_key_columns_raw = payload.get("primary_key_columns", "")
     additional_gb          = float(payload["additional_gb"])
     ingestion_frequency    = payload["ingestion_frequency"]
     load_type              = payload["load_type"]
@@ -160,7 +166,7 @@ def estimate(payload, prices=None):
                        + incremental_table_count * INCREMENTAL_LOAD_FACTOR) / total_tables
     else:
         load_factor = LOAD_TYPE_FACTOR[load_type]
-    base_throughput  = THROUGHPUT_BY_STRUCTURE.get(data_structure, 15.0)
+    base_throughput  = THROUGHPUT_BY_STRUCTURE.get(data_structure_primary, 15.0)
     ingestion_dbu_hr = INGESTION_DBU_BY_METHOD[ingestion_method]
 
     vm_rate_per_node_hr      = p[vm_type_effective]
@@ -188,7 +194,7 @@ def estimate(payload, prices=None):
     compute_cost        = total_dbu_cost + total_vm_cost
 
     # ── Storage cost ───────────────────────────────────────────────────────────
-    compression_ratio = COMPRESSION_RATIO_BY_STRUCTURE.get(data_structure, 2.5)
+    compression_ratio = COMPRESSION_RATIO_BY_STRUCTURE.get(data_structure_primary, 2.5)
     compressed_gb     = additional_gb / compression_ratio
     data_storage_cost = compressed_gb * p["storage_per_gb"]
     transaction_cost  = compressed_gb * TRANSACTION_RATE_PER_GB
@@ -219,7 +225,7 @@ def estimate(payload, prices=None):
     # ── Effort ─────────────────────────────────────────────────────────────────
     complexity_score = (
         INGESTION_METHOD_COMPLEXITY.get(ingestion_method, 2.0)
-        + DATA_STRUCTURE_COMPLEXITY.get(data_structure, 1.0)
+        + DATA_STRUCTURE_COMPLEXITY.get(data_structure_primary, 1.0)
         + CDC_COMPLEXITY.get(cdc_method, 0.0)
         + SCHEMA_STABILITY_COMPLEXITY.get(schema_stability, 0.0)
         + DELETE_COMPLEXITY.get(delete_handling, 0.0)
@@ -258,11 +264,13 @@ def estimate(payload, prices=None):
         "contains_phi": contains_phi, "ingestion_method": ingestion_method,
         "source_system": source_system, "data_structure": data_structure,
         "source_objects": source_objects_raw, "edh_table_names": edh_table_names_raw,
+        "primary_key_columns": primary_key_columns_raw,
         "n_objects": n_objects, "additional_gb": additional_gb, "sla_time_hr": sla_time_hr,
         "ingestion_frequency": ingestion_frequency, "load_type": load_type,
         "bulk_table_count": bulk_table_count, "incremental_table_count": incremental_table_count,
         "primary_key_available": primary_key_available, "delete_handling": delete_handling,
         "schema_stability": schema_stability, "cdc_method": cdc_method, "vm_type": vm_type,
+        "additional_details": additional_details,
     }
     estimation = {
         "request_id": request_id, "ingestion_method": ingestion_method,

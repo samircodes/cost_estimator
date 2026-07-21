@@ -1,3 +1,5 @@
+from itertools import zip_longest
+
 import streamlit as st
 
 from databricks_client import fetch_all_estimates, fetch_all_request_details
@@ -64,6 +66,40 @@ def _effort_badge(level: str) -> str:
     )
 
 
+def _meta_line(detail: dict) -> str:
+    """Small descriptive row (Ingestion Method / Source System) shown under the
+    card header for non-admin users. Only fields present in the detail render."""
+    fields = [
+        ("Ingestion Method", detail.get("ingestion_method")),
+        ("Source System", detail.get("source_system")),
+        ("Source Complexity", detail.get("complexity_source_type")),
+    ]
+    pills = [
+        (
+            f"<span style='font-size:0.82rem;color:#6b7280'>"
+            f"<strong style='color:#374151;font-weight:600'>{label}:</strong> {value}"
+            f"</span>"
+        )
+        for label, value in fields
+        if value
+    ]
+    if not pills:
+        return ""
+    return (
+        f"<div style='display:flex;gap:20px;flex-wrap:wrap;margin:-6px 0 12px'>"
+        f"{''.join(pills)}"
+        f"</div>"
+    )
+
+
+def _render_additional_details(detail: dict) -> None:
+    text = (detail.get("additional_details") or "").strip()
+    if not text:
+        return
+    st.markdown("##### Additional Details")
+    st.markdown(text)
+
+
 def _render_new_source_details(detail: dict) -> None:
     st.markdown("##### Connection")
     c1, c2, c3, c4 = st.columns(4)
@@ -98,6 +134,8 @@ def _render_new_source_details(detail: dict) -> None:
     g2.markdown(f"**Schema Stability**  \n{detail.get('schema_stability') or '—'}")
     g3.markdown(f"**CDC Method**  \n{detail.get('cdc_method') or '—'}")
 
+    _render_additional_details(detail)
+
 
 def _render_source_system_details(detail: dict) -> None:
     st.markdown("##### Source Identification")
@@ -107,11 +145,13 @@ def _render_source_system_details(detail: dict) -> None:
     s3.markdown(f"**Data Structure**  \n{detail.get('data_structure') or '—'}")
 
     st.markdown("##### Source Objects")
-    source_objects  = (detail.get("source_objects")  or "").split(",")
-    edh_table_names = (detail.get("edh_table_names") or "").split(",")
-    for src, edh in zip(source_objects, edh_table_names):
+    source_objects   = (detail.get("source_objects")      or "").split(",")
+    edh_table_names  = (detail.get("edh_table_names")     or "").split(",")
+    primary_key_cols = (detail.get("primary_key_columns") or "").split(",")
+    for src, edh, pk in zip_longest(source_objects, edh_table_names, primary_key_cols, fillvalue=""):
         if src.strip():
-            st.markdown(f"- **{src.strip()}** → `{edh.strip()}`")
+            pk_suffix = f"  ·  PK: `{pk.strip()}`" if pk.strip() else ""
+            st.markdown(f"- **{src.strip()}** → `{edh.strip()}`{pk_suffix}")
 
     st.markdown("##### Load Configuration")
     l1, l2, l3, l4 = st.columns(4)
@@ -129,6 +169,8 @@ def _render_source_system_details(detail: dict) -> None:
     g2.markdown(f"**Delete Handling**  \n{detail.get('delete_handling') or '—'}")
     g3.markdown(f"**Schema Stability**  \n{detail.get('schema_stability') or '—'}")
     g4.markdown(f"**CDC Method**  \n{detail.get('cdc_method') or '—'}")
+
+    _render_additional_details(detail)
 
 
 def render_request_history_page() -> None:
@@ -207,10 +249,12 @@ def render_request_history_page() -> None:
             f"      <span style='color:#6b7280'>{row['business_unit'] or '—'}</span>"
             f"    </span>"
             f"  </div>"
-            f"  <span style='font-size:0.83rem;color:#9ca3af;white-space:nowrap;"
-            f"  padding-top:2px'>{row['request_date'] or '—'}</span>"
+            f"  <span style='font-size:0.98rem;font-weight:600;color:#6b7280;"
+            f"  white-space:nowrap;padding-top:1px'>{row['request_date'] or '—'}</span>"
             f"</div>"
         )
+
+        meta_html = "" if admin or not detail else _meta_line(detail)
 
         sep = "<hr style='margin:12px 0;border:none;border-top:1px solid #e5e7eb'>"
 
@@ -247,6 +291,7 @@ def render_request_history_page() -> None:
                 f"  border-radius:4px;flex-shrink:0'></div>"
                 f"  <div style='flex:1;min-width:0'>"
                 f"    {header_html}"
+                f"    {meta_html}"
                 f"    {sep if cost_html else ''}"
                 f"    {cost_html}"
                 f"    {effort_html}"

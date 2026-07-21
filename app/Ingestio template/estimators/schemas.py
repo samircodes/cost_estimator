@@ -13,11 +13,12 @@ SOURCE_SYSTEM_REQUEST = [
     ("request_date", "str"), ("requestor", "str"), ("business_justification", "str"),
     ("contains_phi", "str"), ("ingestion_method", "str"), ("source_system", "str"),
     ("data_structure", "str"), ("source_objects", "str"), ("edh_table_names", "str"),
+    ("primary_key_columns", "str"),
     ("n_objects", "int"), ("additional_gb", "double"), ("sla_time_hr", "double"),
     ("ingestion_frequency", "str"), ("load_type", "str"),
     ("bulk_table_count", "int"), ("incremental_table_count", "int"),
     ("primary_key_available", "str"), ("delete_handling", "str"), ("schema_stability", "str"),
-    ("cdc_method", "str"), ("vm_type", "str"),
+    ("cdc_method", "str"), ("vm_type", "str"), ("additional_details", "str"),
 ]
 
 SOURCE_SYSTEM_ESTIMATION = [
@@ -49,6 +50,7 @@ NEW_SOURCE_REQUEST = [
     ("sla_time_hr", "double"), ("vm_type", "str"), ("data_distribution", "str"),
     ("delivery_pattern", "str"), ("partition_key_availability", "str"),
     ("complexity_source_type", "str"), ("transformation_logic", "str"), ("frequency", "str"),
+    ("additional_details", "str"),
 ]
 
 NEW_SOURCE_ESTIMATION = [

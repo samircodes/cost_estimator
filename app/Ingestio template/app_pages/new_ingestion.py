@@ -248,8 +248,17 @@ def render_new_ingestion_page() -> None:
                 label_visibility="collapsed",
             )
 
+        # ── Section 6: Additional details (optional) ──────────────────────────
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        st.caption("All fields are required. Please ensure everything is filled in before submitting.")
+        render_field_intro(22, "Additional details (optional)", "Anything else we should know about this source — special handling, contacts, constraints, or context for the reviewer")
+        additional_details = st.text_area(
+            "Additional details",
+            placeholder="Optional — add any extra context for this request",
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        st.caption("All fields are required unless marked optional. Please ensure everything is filled in before submitting.")
         submitted = st.form_submit_button(
             "Submit request", type="primary", use_container_width=False
         )
@@ -318,6 +327,7 @@ def render_new_ingestion_page() -> None:
                     "complexity_source_type":      complexity_source_type,
                     "transformation_logic":        transformation_logic,
                     "frequency":                   frequency,
+                    "additional_details":          additional_details or "",
                     "save_results":                "true",
                 },
             )

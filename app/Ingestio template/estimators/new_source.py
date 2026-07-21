@@ -251,6 +251,7 @@ def estimate(payload, prices=None):
     request_date           = payload.get("request_date", "")
     requestor              = payload.get("requestor", "")
     business_justification = payload.get("business_justification", "")
+    additional_details     = payload.get("additional_details", "")
     contains_phi           = payload.get("contains_phi", "No")
     delete_handling        = payload["delete_handling"]
     schema_stability       = payload["schema_stability"]
@@ -318,7 +319,7 @@ def estimate(payload, prices=None):
         "vm_type": vm_type, "data_distribution": data_distribution, "delivery_pattern": delivery_pattern,
         "partition_key_availability": partition_key_availability,
         "complexity_source_type": complexity_source_type, "transformation_logic": transformation_logic,
-        "frequency": frequency,
+        "frequency": frequency, "additional_details": additional_details,
     }
     estimation = {
         "request_id": request_id, "business_unit": business_unit, "contains_phi": contains_phi,

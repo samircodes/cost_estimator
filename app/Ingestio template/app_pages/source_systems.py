@@ -35,7 +35,9 @@ ALL_DATA_STRUCTURES = (
     "Sql Server", "Sybase", "Postgres", "csv", "parquet", "xlsb", "xls", "API", "Other",
 )
 
-_EMPTY_OBJECTS = pd.DataFrame({"Source Object": [""], "EDH Table Name": [""]})
+_EMPTY_OBJECTS = pd.DataFrame(
+    {"Source Object": [""], "EDH Table Name": [""], "Primary Key Column": [""]}
+)
 
 
 def render_source_systems_page() -> None:
@@ -104,24 +106,25 @@ def render_source_systems_page() -> None:
             "</div></div>",
             unsafe_allow_html=True,
         )
-        auto_index = list(ALL_DATA_STRUCTURES).index(auto_data_structure) if auto_data_structure in ALL_DATA_STRUCTURES else None
-        data_structure = st.selectbox(
+        auto_default = [auto_data_structure] if auto_data_structure in ALL_DATA_STRUCTURES else []
+        data_structures = st.multiselect(
             "Source data structure",
             options=ALL_DATA_STRUCTURES,
-            index=auto_index,
-            placeholder="Select data structure",
+            default=auto_default,
+            placeholder="Select one or more data structures",
             label_visibility="collapsed",
             key="ss_data_structure",
         )
     else:
-        data_structure = None
+        data_structures = []
 
     # ── Source Objects & EDH Table Names ─────────────────────────────────────
     st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
     st.markdown("##### Source Objects")
 
     st.caption(
-        "Add one row per object. Both Source Object and EDH Table Name are required for each row."
+        "Add one row per object. Source Object, EDH Table Name and Primary Key Column are "
+        "required for each row — enter the primary key column name, or 'NA' if not available."
     )
 
     edited_df = st.data_editor(
@@ -132,6 +135,11 @@ def render_source_systems_page() -> None:
         column_config={
             "Source Object":   st.column_config.TextColumn("Source Object",   required=True),
             "EDH Table Name":  st.column_config.TextColumn("EDH Table Name",  required=True),
+            "Primary Key Column": st.column_config.TextColumn(
+                "Primary Key Column",
+                required=True,
+                help="Name of the primary key column, or 'NA' if there isn't one.",
+            ),
         },
         key="ss_objects_editor",
     )
@@ -287,7 +295,15 @@ def render_source_systems_page() -> None:
         )
 
         st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
-        st.caption("All fields are required. Please ensure everything is filled in before submitting.")
+        render_field_intro(15, "Additional details (optional)", "Anything else we should know about this request — special handling, contacts, constraints, or context for the reviewer")
+        additional_details = st.text_area(
+            "Additional details",
+            placeholder="Optional — add any extra context for this request",
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="form-divider"></div>', unsafe_allow_html=True)
+        st.caption("All fields are required unless marked optional. Please ensure everything is filled in before submitting.")
         submitted = st.form_submit_button("Submit request", type="primary")
 
     if submitted:
@@ -301,8 +317,8 @@ def render_source_systems_page() -> None:
         if is_custom_source and not source_system:
             st.error("Please type a name for your custom source system.")
             return
-        if not data_structure:
-            st.error("Please select a Source Data Structure.")
+        if not data_structures:
+            st.error("Please select at least one Source Data Structure.")
             return
 
         if additional_gb <= 0:
@@ -310,13 +326,17 @@ def render_source_systems_page() -> None:
             return
 
         # Validate source objects table
-        valid_rows = edited_df.dropna(subset=["Source Object", "EDH Table Name"])
+        valid_rows = edited_df.dropna(subset=["Source Object", "EDH Table Name", "Primary Key Column"])
         valid_rows = valid_rows[
             (valid_rows["Source Object"].str.strip() != "") &
-            (valid_rows["EDH Table Name"].str.strip() != "")
+            (valid_rows["EDH Table Name"].str.strip() != "") &
+            (valid_rows["Primary Key Column"].str.strip() != "")
         ]
         if valid_rows.empty:
-            st.error("Please add at least one Source Object and EDH Table Name.")
+            st.error(
+                "Please add at least one row with Source Object, EDH Table Name and "
+                "Primary Key Column (use 'NA' if there is no primary key)."
+            )
             return
 
         # Validate the Mix split against the number of source objects.
@@ -365,6 +385,7 @@ def render_source_systems_page() -> None:
         request_id = str(uuid.uuid4())
         source_objects = valid_rows["Source Object"].str.strip().tolist()
         edh_table_names = valid_rows["EDH Table Name"].str.strip().tolist()
+        primary_key_columns = valid_rows["Primary Key Column"].str.strip().tolist()
 
         try:
             run_estimate(
@@ -377,9 +398,11 @@ def render_source_systems_page() -> None:
                     "business_justification": business_justification or "",
                     "ingestion_method":       ingestion_method,
                     "source_system":          source_system,
-                    "data_structure":         data_structure,
+                    "data_structure":         ", ".join(data_structures),
+                    "data_structure_primary": data_structures[0],
                     "source_objects":         ",".join(source_objects),
                     "edh_table_names":        ",".join(edh_table_names),
+                    "primary_key_columns":    ",".join(primary_key_columns),
                     "additional_gb":          str(additional_gb),
                     "ingestion_frequency":    ingestion_frequency,
                     "load_type":              load_type,
@@ -391,6 +414,7 @@ def render_source_systems_page() -> None:
                     "cdc_method":             cdc_method,
                     "vm_type":                vm_type,
                     "contains_phi":           contains_phi,
+                    "additional_details":     additional_details or "",
                     "save_results":           "true",
                 },
             )

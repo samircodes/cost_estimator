@@ -146,6 +146,7 @@ NEW_SOURCE_DETAIL_COLS = [
     "schema_stability",
     "cdc_method",
     "contains_phi",
+    "additional_details",
 ]
 
 NEW_SOURCE_EFFORT_COLS = [
@@ -163,6 +164,7 @@ SOURCE_SYSTEM_DETAIL_COLS = [
     "data_structure",
     "source_objects",
     "edh_table_names",
+    "primary_key_columns",
     "n_objects",
     "additional_gb",
     "sla_time_hr",
@@ -176,6 +178,7 @@ SOURCE_SYSTEM_DETAIL_COLS = [
     "cdc_method",
     "vm_type",
     "contains_phi",
+    "additional_details",
 ]
 
 SOURCE_SYSTEM_EFFORT_COLS = [
